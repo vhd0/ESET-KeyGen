@@ -163,11 +163,3 @@ jobs:
               echo "`nKey:" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
               Get-Content -Path ./*KEYS.txt | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           }
-keepalive:
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: gautamkrishnar/keepalive-workflow@v2
