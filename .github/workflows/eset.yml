@@ -101,6 +101,8 @@ jobs:
           MAIL=${{ needs.setup.outputs.mail }}
           KEY_TYPE=${{ needs.setup.outputs.key_type }}
 
+          touch ../new_keys.txt
+
           if [[ "$ACCOUNT" -ne 0 ]]; then
             python3 main.py --account --email-api $MAIL --repeat $ACCOUNT
           fi
@@ -140,6 +142,8 @@ jobs:
           MAIL=${{ needs.setup.outputs.mail }}
           KEY_TYPE=${{ needs.setup.outputs.key_type }}
 
+          touch ../new_keys.txt
+
           if [[ "$ACCOUNT" -ne 0 ]]; then
             python3 main.py --account --email-api $MAIL --repeat $ACCOUNT
           fi
@@ -176,6 +180,8 @@ jobs:
           $KEY = "${{ needs.setup.outputs.key }}"
           $MAIL = "${{ needs.setup.outputs.mail }}"
           $KEY_TYPE = "${{ needs.setup.outputs.key_type }}"
+
+          New-Item -ItemType File -Path ..\new_keys.txt -Force | Out-Null
 
           if ($ACCOUNT -ne 0) {
             python3 main.py --account --email-api $MAIL --repeat $ACCOUNT
