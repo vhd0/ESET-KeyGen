@@ -82,114 +82,81 @@ jobs:
           echo "os=${{ github.event.inputs.os || 'Linux' }}" >> $GITHUB_OUTPUT
           echo "branch=${{ github.event.inputs.branch || 'main' }}" >> $GITHUB_OUTPUT
 
-  Linux:
+  generate:
     needs: setup
-    if: needs.setup.outputs.os == 'Linux'
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    if: ${{ needs.setup.outputs.os == matrix.name }}
+    strategy:
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            shell: bash
+            install: |
+              sudo apt update
+              sudo apt install -y python3-pip python3-venv
+          - name: macOS
+            os: macos-latest
+            shell: bash
+            install: |
+              brew install python
+          - name: Windows
+            os: windows-latest
+            shell: pwsh
+            install: ''
     steps:
-      - name: Generate key
+      - name: Setup Python and Clone Repo
+        shell: ${{ matrix.shell }}
         run: |
-          ACCOUNT=${{ needs.setup.outputs.account }}
-          KEY=${{ needs.setup.outputs.key }}
-          MAIL=${{ needs.setup.outputs.mail }}
-          KEY_TYPE=${{ needs.setup.outputs.key_type }}
-          BRANCH=${{ needs.setup.outputs.branch }}
-
-          git clone -b ${BRANCH} https://github.com/rzc0d3r/ESET-KeyGen.git
+          git clone -b ${{ needs.setup.outputs.branch }} https://github.com/rzc0d3r/ESET-KeyGen.git
           cd ESET-KeyGen
-
-          sudo apt update
-          sudo apt install -y python3-pip python3-venv
+          ${{ matrix.install }}
           python3 -m venv venv
           source venv/bin/activate
           pip install -r requirements.txt
 
-          if [[ ${ACCOUNT} -ne 0 && ${KEY} -ne 0 ]]; then
-            python3 main.py --auto-detect-browser --account --email-api ${MAIL} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${ACCOUNT}
-            python3 main.py --auto-detect-browser ${KEY_TYPE} --email-api ${MAIL} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${KEY}
-            echo "Account:" >> $GITHUB_STEP_SUMMARY
-            cat ./*ACCOUNTS.txt >> $GITHUB_STEP_SUMMARY
-            echo -e "\nKey:" >> $GITHUB_STEP_SUMMARY
-            cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY
-          elif [[ ${ACCOUNT} -ne 0 ]]; then
-            python3 main.py --auto-detect-browser --account --email-api ${MAIL} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${ACCOUNT}
-            echo -e "\nAccount:" >> $GITHUB_STEP_SUMMARY
-            cat ./*ACCOUNTS.txt >> $GITHUB_STEP_SUMMARY
-          elif [[ ${KEY} -ne 0 ]]; then
-            python3 main.py --auto-detect-browser ${KEY_TYPE} --email-api ${MAIL} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${KEY}
-            echo -e "\nKey:" >> $GITHUB_STEP_SUMMARY
-            cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY
-          fi
-
-  macOS:
-    needs: setup
-    if: needs.setup.outputs.os == 'macOS'
-    runs-on: macos-latest
-    steps:
-      - name: Generate key
-        run: |
           ACCOUNT=${{ needs.setup.outputs.account }}
           KEY=${{ needs.setup.outputs.key }}
           MAIL=${{ needs.setup.outputs.mail }}
           KEY_TYPE=${{ needs.setup.outputs.key_type }}
 
-          git clone https://github.com/rzc0d3r/ESET-KeyGen.git
-          cd ESET-KeyGen
+          mkdir -p output
 
-          brew install python
-          python3 -m venv venv
-          source venv/bin/activate
-          pip install -r requirements.txt
-
-          if [[ ${ACCOUNT} -ne 0 && ${KEY} -ne 0 ]]; then
-            python3 main.py --auto-detect-browser --account --email-api ${MAIL} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${ACCOUNT}
-            python3 main.py --auto-detect-browser ${KEY_TYPE} --email-api ${MAIL} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${KEY}
-            echo "Account:" >> $GITHUB_STEP_SUMMARY
-            cat ./*ACCOUNTS.txt >> $GITHUB_STEP_SUMMARY
-            echo -e "\nKey:" >> $GITHUB_STEP_SUMMARY
-            cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY
-          elif [[ ${ACCOUNT} -ne 0 ]]; then
-            python3 main.py --auto-detect-browser --account --email-api ${MAIL} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${ACCOUNT}
-            echo -e "\nAccount:" >> $GITHUB_STEP_SUMMARY
-            cat ./*ACCOUNTS.txt >> $GITHUB_STEP_SUMMARY
-          elif [[ ${KEY} -ne 0 ]]; then
-            python3 main.py --auto-detect-browser ${KEY_TYPE} --email-api ${MAIL} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${KEY}
-            echo -e "\nKey:" >> $GITHUB_STEP_SUMMARY
-            cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY
+          if [[ "$ACCOUNT" -ne 0 ]]; then
+            python3 main.py --auto-detect-browser --account --email-api $MAIL --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $ACCOUNT
+            cat ./*ACCOUNTS.txt >> $GITHUB_STEP_SUMMARY || true
           fi
 
-  Windows:
-    needs: setup
-    if: needs.setup.outputs.os == 'Windows'
-    runs-on: windows-latest
-    steps:
-      - name: Generate key
+          if [[ "$KEY" -ne 0 ]]; then
+            python3 main.py --auto-detect-browser $KEY_TYPE --email-api $MAIL --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $KEY
+            DATE=$(date -u +"%Y-%m-%d")
+            for f in ./*KEYS.txt; do
+              while IFS= read -r line; do
+                echo "$DATE|$line" >> output/new_keys.txt
+              done < "$f"
+            done
+            cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY || true
+
+      - name: Checkout main branch to update Keys.txt
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge and prune Keys.txt
+        shell: bash
         run: |
-          $ACCOUNT="${{ needs.setup.outputs.account }}"
-          $KEY="${{ needs.setup.outputs.key }}"
-          $MAIL="${{ needs.setup.outputs.mail }}"
-          $KEY_TYPE="${{ needs.setup.outputs.key_type }}"
+          mkdir -p keys
+          touch keys/Keys.txt
+          if [ -f Keys.txt ]; then cp Keys.txt keys/Keys.txt; fi
+          cat output/new_keys.txt >> keys/Keys.txt
+          awk -F'|' -v limit="$(date -u -d '30 days ago' +%Y-%m-%d)" '$1 >= limit' keys/Keys.txt > Keys.txt
 
-          git clone https://github.com/rzc0d3r/ESET-KeyGen.git
-          cd ESET-KeyGen
-
-          pip install -r requirements.txt
-
-          if ($ACCOUNT -ne 0 -and $KEY -ne 0) {
-              python3 main.py --auto-detect-browser --account --email-api $MAIL --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $ACCOUNT
-              python3 main.py --auto-detect-browser $KEY_TYPE --email-api $MAIL --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $KEY
-              echo "Account:" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-              Get-Content -Path ./*ACCOUNTS.txt | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-              echo "`nKey:" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-              Get-Content -Path ./*KEYS.txt | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          }
-          elseif ($ACCOUNT -ne 0) {
-              python3 main.py --auto-detect-browser --account --email-api $MAIL --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $ACCOUNT
-              echo "`nAccount:" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-              Get-Content -Path ./*ACCOUNTS.txt | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          }
-          elseif ($KEY -ne 0) {
-              python3 main.py --auto-detect-browser $KEY_TYPE --email-api $MAIL --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $KEY
-              echo "`nKey:" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-              Get-Content -Path ./*KEYS.txt | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          }
+      - name: Commit Keys.txt to main
+        shell: bash
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add Keys.txt
+          git commit -m "Update Keys.txt on $(date -u)"
+          git push origin main
