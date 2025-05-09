@@ -72,8 +72,7 @@ jobs:
       os: ${{ steps.setvars.outputs.os }}
       branch: ${{ steps.setvars.outputs.branch }}
     steps:
-      - name: Set variables based on event
-        id: setvars
+      - id: setvars
         run: |
           echo "account=${{ github.event.inputs.account || '0' }}" >> $GITHUB_OUTPUT
           echo "key=${{ github.event.inputs.key || '1' }}" >> $GITHUB_OUTPUT
@@ -82,35 +81,17 @@ jobs:
           echo "os=${{ github.event.inputs.os || 'Linux' }}" >> $GITHUB_OUTPUT
           echo "branch=${{ github.event.inputs.branch || 'main' }}" >> $GITHUB_OUTPUT
 
-  generate:
+  Linux:
     needs: setup
-    runs-on: ${{ matrix.os }}
-    if: ${{ needs.setup.outputs.os == matrix.name }}
-    strategy:
-      matrix:
-        include:
-          - name: Linux
-            os: ubuntu-latest
-            shell: bash
-            install: |
-              sudo apt update
-              sudo apt install -y python3-pip python3-venv
-          - name: macOS
-            os: macos-latest
-            shell: bash
-            install: |
-              brew install python
-          - name: Windows
-            os: windows-latest
-            shell: pwsh
-            install: ''
+    if: needs.setup.outputs.os == 'Linux'
+    runs-on: ubuntu-latest
     steps:
-      - name: Setup Python and Clone Repo
-        shell: ${{ matrix.shell }}
+      - name: Generate keys on Linux
         run: |
+          sudo apt update
+          sudo apt install -y python3-pip python3-venv
           git clone -b ${{ needs.setup.outputs.branch }} https://github.com/rzc0d3r/ESET-KeyGen.git
           cd ESET-KeyGen
-          ${{ matrix.install }}
           python3 -m venv venv
           source venv/bin/activate
           pip install -r requirements.txt
@@ -120,43 +101,131 @@ jobs:
           MAIL=${{ needs.setup.outputs.mail }}
           KEY_TYPE=${{ needs.setup.outputs.key_type }}
 
-          mkdir -p output
-
           if [[ "$ACCOUNT" -ne 0 ]]; then
-            python3 main.py --auto-detect-browser --account --email-api $MAIL --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $ACCOUNT
-            cat ./*ACCOUNTS.txt >> $GITHUB_STEP_SUMMARY || true
+            python3 main.py --account --email-api $MAIL --repeat $ACCOUNT
           fi
 
           if [[ "$KEY" -ne 0 ]]; then
-            python3 main.py --auto-detect-browser $KEY_TYPE --email-api $MAIL --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $KEY
+            python3 main.py $KEY_TYPE --email-api $MAIL --repeat $KEY
             DATE=$(date -u +"%Y-%m-%d")
             for f in ./*KEYS.txt; do
               while IFS= read -r line; do
-                echo "$DATE|$line" >> output/new_keys.txt
+                echo "$DATE|$line" >> ../new_keys.txt
               done < "$f"
             done
-            cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY || true
+          fi
 
-      - name: Checkout main branch to update Keys.txt
+      - name: Upload keys
+        uses: actions/upload-artifact@v4
+        with:
+          name: new-keys
+          path: ../new_keys.txt
+
+  macOS:
+    needs: setup
+    if: needs.setup.outputs.os == 'macOS'
+    runs-on: macos-latest
+    steps:
+      - name: Generate keys on macOS
+        run: |
+          brew install python
+          git clone -b ${{ needs.setup.outputs.branch }} https://github.com/rzc0d3r/ESET-KeyGen.git
+          cd ESET-KeyGen
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+
+          ACCOUNT=${{ needs.setup.outputs.account }}
+          KEY=${{ needs.setup.outputs.key }}
+          MAIL=${{ needs.setup.outputs.mail }}
+          KEY_TYPE=${{ needs.setup.outputs.key_type }}
+
+          if [[ "$ACCOUNT" -ne 0 ]]; then
+            python3 main.py --account --email-api $MAIL --repeat $ACCOUNT
+          fi
+
+          if [[ "$KEY" -ne 0 ]]; then
+            python3 main.py $KEY_TYPE --email-api $MAIL --repeat $KEY
+            DATE=$(date -u +"%Y-%m-%d")
+            for f in ./*KEYS.txt; do
+              while IFS= read -r line; do
+                echo "$DATE|$line" >> ../new_keys.txt
+              done < "$f"
+            done
+          fi
+
+      - name: Upload keys
+        uses: actions/upload-artifact@v4
+        with:
+          name: new-keys
+          path: ../new_keys.txt
+
+  Windows:
+    needs: setup
+    if: needs.setup.outputs.os == 'Windows'
+    runs-on: windows-latest
+    steps:
+      - name: Generate keys on Windows
+        shell: pwsh
+        run: |
+          git clone -b ${{ needs.setup.outputs.branch }} https://github.com/rzc0d3r/ESET-KeyGen.git
+          cd ESET-KeyGen
+          pip install -r requirements.txt
+
+          $ACCOUNT = "${{ needs.setup.outputs.account }}"
+          $KEY = "${{ needs.setup.outputs.key }}"
+          $MAIL = "${{ needs.setup.outputs.mail }}"
+          $KEY_TYPE = "${{ needs.setup.outputs.key_type }}"
+
+          if ($ACCOUNT -ne 0) {
+            python3 main.py --account --email-api $MAIL --repeat $ACCOUNT
+          }
+          if ($KEY -ne 0) {
+            python3 main.py $KEY_TYPE --email-api $MAIL --repeat $KEY
+            $date = Get-Date -Format "yyyy-MM-dd"
+            Get-Content .\*KEYS.txt | ForEach-Object { "$date|$_" } | Out-File ..\new_keys.txt -Encoding utf8 -Append
+          }
+
+      - name: Upload keys
+        uses: actions/upload-artifact@v4
+        with:
+          name: new-keys
+          path: ../new_keys.txt
+
+  write-keys:
+    needs: [Linux, macOS, Windows]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
           ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Merge and prune Keys.txt
-        shell: bash
-        run: |
-          mkdir -p keys
-          touch keys/Keys.txt
-          if [ -f Keys.txt ]; then cp Keys.txt keys/Keys.txt; fi
-          cat output/new_keys.txt >> keys/Keys.txt
-          awk -F'|' -v limit="$(date -u -d '30 days ago' +%Y-%m-%d)" '$1 >= limit' keys/Keys.txt > Keys.txt
+      - name: Download generated keys
+        uses: actions/download-artifact@v4
+        with:
+          name: new-keys
+          path: keys
 
-      - name: Commit Keys.txt to main
-        shell: bash
+      - name: Merge and prune Keys.txt
+        run: |
+          touch Keys.txt
+          if [ -f keys/new_keys.txt ]; then
+            cat keys/new_keys.txt >> Keys.txt
+          fi
+          awk -F'|' -v limit="$(date -u -d '30 days ago' +%Y-%m-%d)" '$1 >= limit' Keys.txt > temp && mv temp Keys.txt
+
+      - name: Git diff check
+        run: |
+          git status
+          git diff
+
+      - name: Commit updated Keys.txt
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add Keys.txt
-          git commit -m "Update Keys.txt on $(date -u)"
+          git diff --cached --quiet || git commit -m "Update Keys.txt with new keys"
           git push origin main
