@@ -1,22 +1,39 @@
-# ESET License Keys
+# 🔑 ESET License Keys
 
-Auto-generated ESET license keys (valid for 30 days from generation date).
+Auto-generated ESET license keys, valid for 30 days from generation date.
 
-## Active Keys
+## 🎫 Latest License Details
 
-| Key | Generated | Expires |
-|-----|-----------|---------|
+### License Key
+```
+WJEH-XD3J-JGAV-SS9T-4TTP
+```
 
+### Account Information
+- **Email:** `keeler.inoke@fsitip.com`
+- **Password:** `yR\bywlc0;6.%^`
 
-> Last updated: 2025-06-06 09:55:00 UTC
+### Status
+- **Generated:** 2025-06-06
+- **Expires:** 2025-07-06
+- **Status:** ✅ Active
 
-## Notes
-- Keys are automatically generated daily at 00:00 UTC
-- Keys older than 30 days are automatically removed
-- Each key can be used on up to 3 devices
+## 📝 Usage Instructions
 
-## Usage
-1. Download ESET Security
+1. Download [ESET Security](https://www.eset.com/int/home/cyber-security-pro/)
 2. Install the application
-3. When prompted for license, enter the key from the table above
-4. Enjoy your 30-day premium protection
+3. When prompted for activation:
+   - Enter the license key shown above
+   - Or use the account email and password
+4. Enjoy your premium protection!
+
+## ℹ️ Important Notes
+
+- New keys are automatically generated daily at 00:00 UTC
+- Each key is valid for 30 days from generation date
+- Keys can be used on up to 3 devices
+- Old keys are automatically removed after expiration
+
+## 🔄 Update Information
+- **Last Update:** 2025-06-6 10:00:10 UTC
+- **Updated By:** GitHub Actions
