@@ -37,29 +37,28 @@ jobs:
   generate:
     name: Generate ESET License
     runs-on: ubuntu-latest
-    timeout-minutes: 30  # Timeout sau 30 phút
+    timeout-minutes: 30
 
     steps:
+      - name: Clone KeyGen Repository
+        uses: actions/checkout@v4
+        with:
+          repository: rzc0d3r/ESET-KeyGen
+
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
           cache: 'pip'
-      
+          cache-dependency-path: '**/requirements.txt'
+
       - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y jq xvfb
-          
-      - name: Clone KeyGen Repository
-        uses: actions/checkout@v4
-        with:
-          repository: rzc0d3r/ESET-KeyGen
-          path: keygen
 
       - name: Setup Virtual Environment
         run: |
-          cd keygen
           python -m venv venv
           source venv/bin/activate
           pip install --upgrade pip
@@ -68,7 +67,6 @@ jobs:
       - name: Generate License
         id: generate
         run: |
-          cd keygen
           source venv/bin/activate
           
           # Chạy với xvfb để giả lập display
@@ -97,13 +95,13 @@ jobs:
         if: success()
         uses: actions/checkout@v4
         with:
-          path: repo
+          path: target
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Keys Database
         if: success()
         run: |
-          cd repo
+          cd target
           
           # Tạo file keys nếu chưa tồn tại
           if [ ! -f eset_keys.json ]; then
@@ -147,7 +145,7 @@ jobs:
       - name: Commit Changes
         if: success()
         run: |
-          cd repo
+          cd target
           
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
@@ -170,8 +168,8 @@ jobs:
         if: always()
         run: |
           # Xóa các file tạm và venv
-          rm -rf keygen/venv
-          rm -rf repo
+          rm -rf venv
+          rm -rf target
 
 permissions:
   contents: write
