@@ -2,7 +2,7 @@ name: ESET Key Generator
 
 on:
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 0 * * *"  # Chạy hàng ngày lúc 00:00 UTC
   workflow_dispatch:
     inputs:
       key:
@@ -81,12 +81,25 @@ jobs:
             --repeat ${{ github.event.inputs.key || '1' }}
           
           if [ -f *KEYS.txt ]; then
-            # Lấy chỉ license key từ file output
+            # Lấy thông tin từ file output
+            ACCOUNT_EMAIL=$(grep -oP 'Account Email: \K.*' *KEYS.txt)
+            ACCOUNT_PASS=$(grep -oP 'Account Password: \K.*' *KEYS.txt)
             LICENSE_KEY=$(grep -oP 'License Key: \K[A-Z0-9-]+' *KEYS.txt)
-            echo "key=$LICENSE_KEY" >> $GITHUB_OUTPUT
             
-            echo "## Generated License" >> $GITHUB_STEP_SUMMARY
-            echo "Key: $LICENSE_KEY" >> $GITHUB_STEP_SUMMARY
+            # Lưu vào outputs để sử dụng ở các steps sau
+            {
+              echo "key=$LICENSE_KEY"
+              echo "email=$ACCOUNT_EMAIL"
+              echo "password=$ACCOUNT_PASS"
+            } >> $GITHUB_OUTPUT
+            
+            # Hiển thị trong summary
+            {
+              echo "## 🎉 Generated License"
+              echo "**Key:** \`$LICENSE_KEY\`"
+              echo "**Email:** \`$ACCOUNT_EMAIL\`"
+              echo "**Password:** \`$ACCOUNT_PASS\`"
+            } >> $GITHUB_STEP_SUMMARY
           else
             echo "❌ No keys were generated" >> $GITHUB_STEP_SUMMARY
             exit 1
@@ -104,54 +117,78 @@ jobs:
         run: |
           cd target
           
-          # Tạo file keys nếu chưa tồn tại
+          # Khởi tạo file JSON nếu chưa tồn tại
           if [ ! -f eset_keys.json ]; then
-            echo '{"keys":[]}' > eset_keys.json
+            echo '{
+              "keys": []
+            }' > eset_keys.json
           fi
           
-          # Cập nhật keys
+          # Lấy thông tin key mới
           NEW_KEY="${{ steps.generate.outputs.key }}"
+          NEW_EMAIL="${{ steps.generate.outputs.email }}"
+          NEW_PASS="${{ steps.generate.outputs.password }}"
           CURRENT_DATE=$(date -u +"%Y-%m-%d")
+          EXPIRE_DATE=$(date -u -d "$CURRENT_DATE +30 days" +"%Y-%m-%d")
           
-          # Kiểm tra xem key đã tồn tại chưa
-          KEY_EXISTS=$(jq --arg key "$NEW_KEY" '.keys[] | select(.[0] == $key) | length' eset_keys.json)
-          if [ "$KEY_EXISTS" = "" ]; then
-            # Thêm key mới nếu chưa tồn tại
-            jq --arg key "$NEW_KEY" --arg date "$CURRENT_DATE" '
-            .keys = (
-              .keys | map(
-                select(
-                  (now - (.[1] | fromdateiso8601)) < 2592000
-                )
-              )
-              + [[$key, $date]]
-            )' eset_keys.json > temp.json && mv temp.json eset_keys.json
-          fi
+          # Cập nhật file JSON với key mới
+          jq --arg key "$NEW_KEY" \
+             --arg email "$NEW_EMAIL" \
+             --arg pass "$NEW_PASS" \
+             --arg date "$CURRENT_DATE" \
+             --arg expire "$EXPIRE_DATE" \
+          '{
+            "keys": [{
+              "key": $key,
+              "email": $email,
+              "password": $pass,
+              "generated": $date,
+              "expires": $expire,
+              "status": "active"
+            }]
+          }' > eset_keys.json
           
-          # Cập nhật README
+          # Tạo README mới
           cat > README.md << EOF
-          # ESET License Keys
-          
-          Auto-generated ESET license keys (valid for 30 days from generation date).
-          
-          ## Active Keys
-          
-          | Key | Generated | Expires |
-          |-----|-----------|---------|
-          $(jq -r '.keys[] | "| \(.[0]) | \(.[1]) | \(.[1] | fromdate | strftime("%Y-%m-%d") | split("-") | .[0] + "-" + .[1] + "-" + (.[2] | tonumber + 30 | tostring) ) |"' eset_keys.json)
-          
-          > Last updated: $(date -u "+%Y-%m-%d %H:%M:%S UTC")
-          
-          ## Notes
-          - Keys are automatically generated daily at 00:00 UTC
-          - Keys older than 30 days are automatically removed
-          - Each key can be used on up to 3 devices
-          
-          ## Usage
-          1. Download ESET Security
+          # 🔑 ESET License Keys
+
+          Auto-generated ESET license keys, valid for 30 days from generation date.
+
+          ## 🎫 Latest License Details
+
+          ### License Key
+          \`\`\`
+          $NEW_KEY
+          \`\`\`
+
+          ### Account Information
+          - **Email:** \`$NEW_EMAIL\`
+          - **Password:** \`$NEW_PASS\`
+
+          ### Status
+          - **Generated:** $CURRENT_DATE
+          - **Expires:** $EXPIRE_DATE
+          - **Status:** ✅ Active
+
+          ## 📝 Usage Instructions
+
+          1. Download [ESET Security](https://www.eset.com/int/home/cyber-security-pro/)
           2. Install the application
-          3. When prompted for license, enter the key from the table above
-          4. Enjoy your 30-day premium protection
+          3. When prompted for activation:
+             - Enter the license key shown above
+             - Or use the account email and password
+          4. Enjoy your premium protection!
+
+          ## ℹ️ Important Notes
+
+          - New keys are automatically generated daily at 00:00 UTC
+          - Each key is valid for 30 days from generation date
+          - Keys can be used on up to 3 devices
+          - Old keys are automatically removed after expiration
+
+          ## 🔄 Update Information
+          - **Last Update:** $(date -u "+%Y-%m-%-d %H:%M:%S") UTC
+          - **Updated By:** GitHub Actions
           EOF
 
       - name: Commit Changes
@@ -165,14 +202,19 @@ jobs:
           git add eset_keys.json README.md
           
           if ! git diff --cached --quiet; then
-            git commit -m "🔑 Update ESET keys [skip ci]
-            
-            • Added: ${{ steps.generate.outputs.key }}
-            • Generated: $(date -u '+%Y-%m-%d')
-            • Expires: $(date -u -d '+30 days' '+%Y-%m-%d')
-            
+            # Tạo commit message với emoji và thông tin chi tiết
+            COMMIT_MSG="🔑 New ESET License Key ($(date -u '+%Y-%m-%d'))
+
+            ▶️ Key: ${{ steps.generate.outputs.key }}
+            📧 Email: ${{ steps.generate.outputs.email }}
+            🔐 Pass: ${{ steps.generate.outputs.password }}
+
+            📅 Generated: $(date -u '+%Y-%m-%d %H:%M:%S') UTC
+            ⏳ Expires: $(date -u -d '+30 days' '+%Y-%m-%d')
+
             [Auto-generated by GitHub Actions]"
             
+            git commit -m "$COMMIT_MSG"
             git push
           fi
 
