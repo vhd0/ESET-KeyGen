@@ -81,6 +81,7 @@ jobs:
           echo "key_type=${{ github.event.inputs.key_type || '--key' }}" >> $GITHUB_OUTPUT
           echo "os=${{ github.event.inputs.os || 'Linux' }}" >> $GITHUB_OUTPUT
           echo "branch=${{ github.event.inputs.branch || 'main' }}" >> $GITHUB_OUTPUT
+
   Linux:
     needs: setup
     if: needs.setup.outputs.os == 'Linux'
@@ -96,7 +97,7 @@ jobs:
           git clone -b ${BRANCH} https://github.com/rzc0d3r/ESET-KeyGen.git
           cd ESET-KeyGen
           sudo apt update
-          sudo apt install -y python3-pip python3-venv
+          sudo apt install -y python3-pip python3-venv jq
           python3 -m venv venv
           source venv/bin/activate
           pip install -r requirements.txt
@@ -116,6 +117,45 @@ jobs:
             echo -e "\nKey:" >> $GITHUB_STEP_SUMMARY
             cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY
           fi
+
+      - name: Checkout repository
+        if: ${{ needs.setup.outputs.key != '0' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup.outputs.branch }}
+          
+      - name: Update keys file
+        if: ${{ needs.setup.outputs.key != '0' }}
+        run: |
+          if [ ! -f eset_keys.json ]; then
+            echo '{"keys":[]}' > eset_keys.json
+          fi
+          
+          NEW_KEY=$(cat ESET-KeyGen/*KEYS.txt)
+          CURRENT_DATE=$(date -u +"%Y-%m-%d")
+          
+          TMP_FILE=$(mktemp)
+          
+          jq --arg key "$NEW_KEY" --arg date "$CURRENT_DATE" '
+          .keys = (
+            .keys | map(
+              select(
+                (now - (.[1] | fromdateiso8601)) < 2592000
+              )
+            )
+          ) + [[$key, $date]]
+          ' eset_keys.json > "$TMP_FILE"
+          
+          mv "$TMP_FILE" eset_keys.json
+          
+      - name: Commit and push if changed
+        if: ${{ needs.setup.outputs.key != '0' }}
+        run: |
+          git config --global user.name 'GitHub Action'
+          git config --global user.email 'action@github.com'
+          git add eset_keys.json
+          git diff --cached --quiet || (git commit -m "Update ESET keys [skip ci]" && git push)
+
   macOS:
     needs: setup
     if: needs.setup.outputs.os == 'macOS'
@@ -127,9 +167,10 @@ jobs:
           KEY=${{ needs.setup.outputs.key }}
           MAIL=${{ needs.setup.outputs.mail }}
           KEY_TYPE=${{ needs.setup.outputs.key_type }}
-          git clone https://github.com/rzc0d3r/ESET-KeyGen.git
+          BRANCH=${{ needs.setup.outputs.branch }}
+          git clone -b ${BRANCH} https://github.com/rzc0d3r/ESET-KeyGen.git
           cd ESET-KeyGen
-          brew install python
+          brew install python jq
           python3 -m venv venv
           source venv/bin/activate
           pip install -r requirements.txt
@@ -149,6 +190,45 @@ jobs:
             echo -e "\nKey:" >> $GITHUB_STEP_SUMMARY
             cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY
           fi
+
+      - name: Checkout repository
+        if: ${{ needs.setup.outputs.key != '0' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup.outputs.branch }}
+          
+      - name: Update keys file
+        if: ${{ needs.setup.outputs.key != '0' }}
+        run: |
+          if [ ! -f eset_keys.json ]; then
+            echo '{"keys":[]}' > eset_keys.json
+          fi
+          
+          NEW_KEY=$(cat ESET-KeyGen/*KEYS.txt)
+          CURRENT_DATE=$(date -u +"%Y-%m-%d")
+          
+          TMP_FILE=$(mktemp)
+          
+          jq --arg key "$NEW_KEY" --arg date "$CURRENT_DATE" '
+          .keys = (
+            .keys | map(
+              select(
+                (now - (.[1] | fromdateiso8601)) < 2592000
+              )
+            )
+          ) + [[$key, $date]]
+          ' eset_keys.json > "$TMP_FILE"
+          
+          mv "$TMP_FILE" eset_keys.json
+          
+      - name: Commit and push if changed
+        if: ${{ needs.setup.outputs.key != '0' }}
+        run: |
+          git config --global user.name 'GitHub Action'
+          git config --global user.email 'action@github.com'
+          git add eset_keys.json
+          git diff --cached --quiet || (git commit -m "Update ESET keys [skip ci]" && git push)
+
   Windows:
     needs: setup
     if: needs.setup.outputs.os == 'Windows'
@@ -160,7 +240,8 @@ jobs:
           $KEY="${{ needs.setup.outputs.key }}"
           $MAIL="${{ needs.setup.outputs.mail }}"
           $KEY_TYPE="${{ needs.setup.outputs.key_type }}"
-          git clone https://github.com/rzc0d3r/ESET-KeyGen.git
+          $BRANCH="${{ needs.setup.outputs.branch }}"
+          git clone -b $BRANCH https://github.com/rzc0d3r/ESET-KeyGen.git
           cd ESET-KeyGen
           pip install -r requirements.txt
           if ($ACCOUNT -ne 0 -and $KEY -ne 0) {
@@ -180,4 +261,42 @@ jobs:
               python3 main.py --auto-detect-browser $KEY_TYPE --email-api $MAIL --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $KEY
               echo "`nKey:" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
               Get-Content -Path ./*KEYS.txt | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          }
+
+      - name: Checkout repository
+        if: ${{ needs.setup.outputs.key != '0' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup.outputs.branch }}
+          
+      - name: Update keys file
+        if: ${{ needs.setup.outputs.key != '0' }}
+        run: |
+          if (-not (Test-Path eset_keys.json)) {
+            Set-Content -Path eset_keys.json -Value '{"keys":[]}'
+          }
+          
+          $NEW_KEY = Get-Content ESET-KeyGen/*KEYS.txt
+          $CURRENT_DATE = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
+          
+          $json = Get-Content eset_keys.json | ConvertFrom-Json
+          
+          $json.keys = @($json.keys | Where-Object {
+            $keyDate = [DateTime]::Parse($_[1])
+            ((Get-Date).ToUniversalTime() - $keyDate).TotalDays -lt 30
+          })
+          
+          $json.keys += ,@($NEW_KEY, $CURRENT_DATE)
+          
+          $json | ConvertTo-Json -Depth 10 | Set-Content eset_keys.json
+
+      - name: Commit and push if changed
+        if: ${{ needs.setup.outputs.key != '0' }}
+        run: |
+          git config --global user.name 'GitHub Action'
+          git config --global user.email 'action@github.com'
+          git add eset_keys.json
+          git diff --cached --quiet; if ($LASTEXITCODE -eq 1) {
+            git commit -m "Update ESET keys [skip ci]"
+            git push
           }
