@@ -5,29 +5,26 @@ on:
     - cron: "0 0 * * *"  # Chạy hàng ngày lúc 00:00 UTC
   workflow_dispatch:
     inputs:
-      account:
-        description: 'Number of Accounts to be generated (default = 0)'
-        required: false
-        default: '0'
       key:
-        description: 'Number of Keys to be generated (default = 1)'
+        description: 'Number of Keys to generate (default = 1)'
         required: false
         default: '1'
+        type: string
       mail:
-        description: 'Choose the mail provider'
+        description: 'Mail provider for license generation'
         required: true
         type: choice
         options:
+          - fakemail
           - 1secmail
           - guerrillamail
           - developermail
           - mailticking
-          - fakemail
           - inboxes
           - incognitomail
         default: fakemail
       key_type:
-        description: 'Key type'
+        description: 'License type'
         required: true
         type: choice
         options:
@@ -35,171 +32,150 @@ on:
           - --small-business-key
           - --vpn-codes
         default: --key
-      os:
-        description: 'Operating System'
-        required: true
-        type: choice
-        options:
-          - Linux
-          - macOS
-          - Windows
-        default: Linux
 
 jobs:
-  generate-keys:
-    name: Generate ESET Keys
-    runs-on: ${{ github.event.inputs.os || 'ubuntu-latest' }}
-    
+  generate:
+    name: Generate ESET License
+    runs-on: ubuntu-latest
+    timeout-minutes: 30  # Timeout sau 30 phút
+
     steps:
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.x'
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq xvfb
           
       - name: Clone KeyGen Repository
-        run: |
-          echo "Cloning ESET-KeyGen repository..."
-          git clone https://github.com/rzc0d3r/ESET-KeyGen.git
-          cd ESET-KeyGen
-      
-      - name: Install Dependencies
-        run: |
-          echo "Installing Python packages..."
-          python -m pip install --upgrade pip
-          pip install -r ESET-KeyGen/requirements.txt
-          
-          if [ "$RUNNER_OS" == "Linux" ]; then
-            sudo apt-get update
-            sudo apt-get install -y jq
-          elif [ "$RUNNER_OS" == "macOS" ]; then
-            brew install jq || true
-          elif [ "$RUNNER_OS" == "Windows" ]; then
-            choco install jq -y
-          fi
-        shell: bash
+        uses: actions/checkout@v4
+        with:
+          repository: rzc0d3r/ESET-KeyGen
+          path: keygen
 
-      - name: Generate Keys and Accounts
+      - name: Setup Virtual Environment
+        run: |
+          cd keygen
+          python -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Generate License
         id: generate
         run: |
-          cd ESET-KeyGen
+          cd keygen
+          source venv/bin/activate
           
-          ACCOUNT=${{ github.event.inputs.account || '0' }}
-          KEY=${{ github.event.inputs.key || '1' }}
-          MAIL=${{ github.event.inputs.mail || 'fakemail' }}
-          KEY_TYPE=${{ github.event.inputs.key_type || '--key' }}
+          # Chạy với xvfb để giả lập display
+          xvfb-run python main.py \
+            --auto-detect-browser \
+            ${{ github.event.inputs.key_type || '--key' }} \
+            --email-api ${{ github.event.inputs.mail || 'fakemail' }} \
+            --skip-update-check \
+            --no-logo \
+            --disable-progress-bar \
+            --disable-logging \
+            --repeat ${{ github.event.inputs.key || '1' }}
           
-          # Generate Account if requested
-          if [ "$ACCOUNT" != "0" ]; then
-            echo "Generating $ACCOUNT account(s)..."
-            python main.py --auto-detect-browser --account --email-api "$MAIL" \
-                         --skip-update-check --no-logo --disable-progress-bar \
-                         --disable-logging --repeat "$ACCOUNT"
-            
-            if [ -f *ACCOUNTS.txt ]; then
-              echo "account_generated=true" >> $GITHUB_OUTPUT
-              echo "## Generated Accounts" >> $GITHUB_STEP_SUMMARY
-              cat *ACCOUNTS.txt >> $GITHUB_STEP_SUMMARY
-            fi
+          if [ -f *KEYS.txt ]; then
+            echo "key_content<<EOF" >> $GITHUB_OUTPUT
+            cat *KEYS.txt >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            echo "## Generated Keys" >> $GITHUB_STEP_SUMMARY
+            cat *KEYS.txt >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ No keys were generated" >> $GITHUB_STEP_SUMMARY
+            exit 1
           fi
-          
-          # Generate Key
-          if [ "$KEY" != "0" ]; then
-            echo "Generating $KEY key(s)..."
-            python main.py --auto-detect-browser "$KEY_TYPE" --email-api "$MAIL" \
-                         --skip-update-check --no-logo --disable-progress-bar \
-                         --disable-logging --repeat "$KEY"
-            
-            if [ -f *KEYS.txt ]; then
-              echo "key_generated=true" >> $GITHUB_OUTPUT
-              echo "## Generated Keys" >> $GITHUB_STEP_SUMMARY
-              cat *KEYS.txt >> $GITHUB_STEP_SUMMARY
-              echo "key_content<<EOF" >> $GITHUB_OUTPUT
-              cat *KEYS.txt >> $GITHUB_OUTPUT
-              echo "EOF" >> $GITHUB_OUTPUT
-            fi
-          fi
-        shell: bash
-          
-      - name: Checkout Repository
-        if: steps.generate.outputs.key_generated == 'true'
+
+      - name: Checkout Target Repository
+        if: success()
         uses: actions/checkout@v4
-        
-      - name: Update Keys File
-        if: steps.generate.outputs.key_generated == 'true'
+        with:
+          path: repo
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Keys Database
+        if: success()
         run: |
-          # Initialize keys file if it doesn't exist
+          cd repo
+          
+          # Tạo file keys nếu chưa tồn tại
           if [ ! -f eset_keys.json ]; then
             echo '{"keys":[]}' > eset_keys.json
           fi
           
-          # Get current key and date
+          # Cập nhật keys
           NEW_KEY="${{ steps.generate.outputs.key_content }}"
           CURRENT_DATE=$(date -u +"%Y-%m-%d")
           
-          # Update JSON file
           jq --arg key "$NEW_KEY" --arg date "$CURRENT_DATE" '
           .keys = (
-            # Filter out keys older than 30 days
             .keys | map(
               select(
                 (now - (.[1] | fromdateiso8601)) < 2592000
               )
             )
-            # Add new key
             + [[$key, $date]]
           )' eset_keys.json > temp.json && mv temp.json eset_keys.json
           
-          # Create README.md with available keys
+          # Cập nhật README
           cat > README.md << EOF
-          # ESET Keys
+          # ESET License Keys
           
-          This repository contains automatically generated ESET license keys.
-          Keys are valid for 30 days from generation date.
+          Auto-generated ESET license keys (valid for 30 days from generation date).
           
-          ## Available Keys
+          ## Active Keys
           
-          | Key | Generation Date | Status |
-          |-----|----------------|---------|
-          $(jq -r '.keys[] | "| \(.[0]) | \(.[1]) | Valid |"' eset_keys.json)
+          | Key | Generated | Expires |
+          |-----|-----------|---------|
+          $(jq -r '.keys[] | "| \(.[0]) | \(.[1]) | \(.[1] | fromdate | todate + 2592000 | strftime("%Y-%m-%d")) |"' eset_keys.json)
           
-          Last updated: $(date -u "+%Y-%m-%d %H:%M:%S UTC")
+          > Last updated: $(date -u "+%Y-%m-%d %H:%M:%S UTC")
+          
+          ## Notes
+          - Keys are automatically generated daily at 00:00 UTC
+          - Keys older than 30 days are automatically removed
+          - Each key can be used on up to 3 devices
           EOF
-        shell: bash
-        
+
       - name: Commit Changes
-        if: steps.generate.outputs.key_generated == 'true'
+        if: success()
         run: |
+          cd repo
+          
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           
           git add eset_keys.json README.md
           
           if ! git diff --cached --quiet; then
-            git commit -m "Update ESET keys [skip ci]
+            git commit -m "🔑 Update ESET keys [skip ci]
             
-            - Added new key(s)
-            - Removed expired keys
-            - Updated README
+            • Added new key(s)
+            • Removed expired keys
+            • Updated documentation
             
-            Generated by GitHub Actions on $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
             
             git push
-          else
-            echo "No changes to commit"
           fi
-        shell: bash
-        
-      - name: Alert on Failure
-        if: failure()
+
+      - name: Cleanup
+        if: always()
         run: |
-          echo "## ❌ Workflow Failed" >> $GITHUB_STEP_SUMMARY
-          echo "Please check the logs for more details." >> $GITHUB_STEP_SUMMARY
-          
-          if [ -f ESET-KeyGen/error.log ]; then
-            echo "### Error Log" >> $GITHUB_STEP_SUMMARY
-            cat ESET-KeyGen/error.log >> $GITHUB_STEP_SUMMARY
-          fi
-        shell: bash
+          # Xóa các file tạm và venv
+          rm -rf keygen/venv
+          rm -rf repo
 
 permissions:
   contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
