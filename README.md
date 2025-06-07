@@ -6,16 +6,16 @@ Auto-generated ESET license keys, valid for 30 days from generation date.
 
 ### License Key
 ```
-WJEH-XD3J-JGAV-SS9T-4TTP
+VMK8-XHNW-854P-GFWJ-23RX
 ```
 
 ### Account Information
-- **Email:** `keeler.inoke@fsitip.com`
-- **Password:** `yR\bywlc0;6.%^`
+- **Email:** `daylyn.taiven@fsitip.com`
+- **Password:** `FYj9nxl}iIGkn?ArbO`
 
 ### Status
-- **Generated:** 2025-06-06
-- **Expires:** 2025-07-06
+- **Generated:** 2025-06-07
+- **Expires:** 2025-07-07
 - **Status:** ✅ Active
 
 ## 📝 Usage Instructions
@@ -35,5 +35,5 @@ WJEH-XD3J-JGAV-SS9T-4TTP
 - Old keys are automatically removed after expiration
 
 ## 🔄 Update Information
-- **Last Update:** 2025-06-6 10:00:10 UTC
+- **Last Update:** 2025-06-7 01:07:11 UTC
 - **Updated By:** GitHub Actions
