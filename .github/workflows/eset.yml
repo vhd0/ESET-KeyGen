@@ -35,30 +35,28 @@ jobs:
           KEY=$(grep "License Key:" ./*KEYS.txt | awk '{print $3}')
           EMAIL=$(grep "Account Email:" ./*KEYS.txt | awk '{print $3}')
           PASS=$(grep "Account Password:" ./*KEYS.txt | cut -d':' -f2- | xargs)
-          # Ghi ra file tạm, mỗi trường ngăn cách bởi |, ngày tạo là hôm nay
           TODAY=$(date -u +"%Y-%m-%d")
-          echo "$KEY|$EMAIL|$PASS|$TODAY" > ../new_key.txt
+          EXPIRE=$(date -u -d "$TODAY +30 days" +"%Y-%m-%d")
+          echo "$KEY|$EMAIL|$PASS|$EXPIRE" > ../new_key.txt
 
-      - name: Update keys file (keep only valid 30-day keys)
+      - name: Update keys file (keep only valid keys)
         run: |
           TODAY=$(date -u +"%Y-%m-%d")
-          # Tạo file nếu chưa có
           if [ ! -f eset_keys.txt ]; then
             touch eset_keys.txt
           fi
-          # Lọc ra các key còn hạn
+          # Giữ lại các key còn hạn (ngày hết hạn >= hôm nay)
           awk -F\| -v today="$TODAY" '
             NF<4 {next}
             {
-              key=$1; email=$2; pass=$3; date=$4
-              cmd="date -d " date " +%s"
-              cmd | getline d_epoch
+              expire=$4
+              cmd="date -d " expire " +%s"
+              cmd | getline e_epoch
               close(cmd)
               cmd="date -d " today " +%s"
               cmd | getline t_epoch
               close(cmd)
-              age=(t_epoch-d_epoch)/86400
-              if (age<30) print key "|" email "|" pass "|" date
+              if (e_epoch >= t_epoch) print $0
             }
           ' eset_keys.txt > eset_keys.tmp || true
           # Thêm key mới nếu chưa có trong file
