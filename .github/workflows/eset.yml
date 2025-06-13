@@ -2,7 +2,7 @@ name: ESET Key Generator
 
 on:
   schedule:
-    - cron: "0 */7 * * *"
+    - cron: "0 */7 * * *"  # Chạy mỗi 7 tiếng
   workflow_dispatch:
 
 jobs:
@@ -28,13 +28,13 @@ jobs:
           cd keygen
           python3 -m venv venv
           source venv/bin/activate
-          pip install --upgrade pip
           pip install -r requirements.txt
           xvfb-run python3 main.py --auto-detect-browser --key --email-api fakemail --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat 1
           # Trích xuất key, email, password
           KEY=$(grep "License Key:" ./*KEYS.txt | awk '{print $3}')
           EMAIL=$(grep "Account Email:" ./*KEYS.txt | awk '{print $3}')
-          PASS=$(grep "Account Password:" ./*KEYS.txt | cut -d':' -f2- | xargs)
+          # Loại bỏ ký tự trắng đầu dòng, không dùng xargs để tránh lỗi với ký tự đặc biệt
+          PASS=$(grep "Account Password:" ./*KEYS.txt | cut -d':' -f2- | sed 's/^ *//')
           TODAY=$(date -u +"%Y-%m-%d")
           EXPIRE=$(date -u -d "$TODAY +30 days" +"%Y-%m-%d")
           echo "$KEY|$EMAIL|$PASS|$EXPIRE" > ../new_key.txt
