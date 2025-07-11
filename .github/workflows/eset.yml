@@ -3,151 +3,160 @@ name: Generator
 on:
   workflow_dispatch:
     inputs:
-      account:
-        description: 'Number of Accounts to be generated (default = 0)'
-        required: false
-        default: '0'
-      key:
-        description: 'Number of Keys to be generated (default = 1)'
-        required: false
-        default: '1'
-      mail:
-        description: 'Choose the mail provider to generate license'
-        required: true
-        type: choice
-        options:
-        - 1secmail
-        - guerrillamail
-        - developermail
-        - mailticking
-        - fakemail
-        - inboxes
-        - incognitomail
-        - emailfake
-        default: emailfake
-      key_type:
-        description: 'Modes of operation'
-        required: true
-        type: choice
-        options:
-        - --key
-        - --small-business-key
-        default: --key
-      os:
-        description: 'Operating System of runner'
-        required: true
-        type: choice
-        options:
-        - macOS
-        - Linux
-        - Windows
-        default: macOS
       branch:
-        description: "Repository branch (don't touch it if you don't know what it is!!!)"
-        required: false
-        type: choice
-        options:
-        - main
-        - test
-        default: main
+        description: "Repository branch to commit the key to (e.g., main)"
+        required: true
+        default: 'main'
 
 jobs:
-  generator:
-    runs-on: ubuntu-latest # Using Ubuntu for the main logic and randomization
+  generate:
+    runs-on: ${{ matrix.os }}
+    # Tiếp tục chạy các job khác trong matrix ngay cả khi một job bị lỗi
+    continue-on-error: true
+    strategy:
+      # Chạy tất cả các job trong matrix, không hủy các job khác nếu một job lỗi
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        mail_api: [1secmail, guerrillamail, developermail, mailticking, fakemail, inboxes, incognitomail, emailfake]
+        key_type: [--key, --small-business-key]
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Prepare environment and run generation loop
-        id: generate
+      - name: Clone ESET-KeyGen Repository
+        run: git clone https://github.com/rzc0d3r/ESET-KeyGen.git
+
+      - name: Setup Python Environment (Linux)
+        if: runner.os == 'Linux'
         run: |
-          # Define inputs for randomization
-          OS_OPTIONS=("Linux" "macOS" "Windows")
-          MAIL_OPTIONS=("1secmail" "guerrillamail" "developermail" "mailticking" "fakemail" "inboxes" "incognitomail" "emailfake")
-          KEY_TYPE_OPTIONS=("--key" "--small-business-key")
-          REPO_URL="https://github.com/rzc0d3r/ESET-KeyGen.git"
-          BRANCH=${{ github.event.inputs.branch }}
+          sudo apt-get update
+          sudo apt-get install -y python3-pip python3-venv
+          python3 -m venv ESET-KeyGen/venv
+          source ESET-KeyGen/venv/bin/activate
+          pip install -r ESET-KeyGen/requirements.txt
+        
+      - name: Setup Python Environment (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install python
+          python3 -m venv ESET-KeyGen/venv
+          source ESET-KeyGen/venv/bin/activate
+          pip install -r ESET-KeyGen/requirements.txt
 
-          # Initialize output file (Markdown table header)
-          echo "| Key Type | Key | Username | Password | Expires Date |" > output.md
-          echo "| :--- | :--- | :--- | :--- | :--- |" >> output.md
+      - name: Setup Python Environment (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          pip install -r ESET-KeyGen/requirements.txt
+
+      - name: Attempt to Generate Key
+        id: generate_key
+        run: |
+          cd ESET-KeyGen
           
-          # Initialize variables for loop control
-          SUCCESS=0
+          # Activate venv for Linux/macOS
+          if [ -f "venv/bin/activate" ]; then
+            source venv/bin/activate
+          fi
           
-          # Iterate through combinations and attempt to generate a key
-          for os in "${OS_OPTIONS[@]}"; do
-            if [ $SUCCESS -eq 1 ]; then
-              break
-            fi
+          # Run the generator and save output
+          python main.py --auto-detect-browser ${{ matrix.key_type }} --email-api ${{ matrix.mail_api }} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat 1
+          
+          # Check if key file was created and is not empty
+          KEY_FILE=$(ls ./*KEYS.txt 2>/dev/null | head -n 1)
+          if [ -n "$KEY_FILE" ] && [ -s "$KEY_FILE" ]; then
+            echo "SUCCESS: Key generated successfully."
+            echo "key_generated=true" >> $GITHUB_OUTPUT
+            # Prepare result for upload
+            KEY_CONTENT=$(cat "$KEY_FILE")
+            echo "key_content<<EOF" >> $GITHUB_OUTPUT
+            echo "$KEY_CONTENT" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "FAILURE: Could not generate key with this combination."
+            echo "key_generated=false" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Upload successful key
+        if: steps.generate_key.outputs.key_generated == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: key-data-${{ matrix.os }}-${{ matrix.mail_api }}-${{ matrix.key_type }}
+          path: |
+            ESET-KeyGen/*KEYS.txt
             
-            for key_type in "${KEY_TYPE_OPTIONS[@]}"; do
-              if [ $SUCCESS -eq 1 ]; then
-                break
-              fi
+  summarize:
+    runs-on: ubuntu-latest
+    needs: generate
+    # Luôn chạy job này để xử lý kết quả, dù job 'generate' thành công hay thất bại
+    if: always()
 
-              for mail in "${MAIL_OPTIONS[@]}"; do
-                if [ $SUCCESS -eq 1 ]; then
-                  break
-                fi
-                
-                echo "Attempting generation with OS: $os, Mail: $mail, Key Type: $key_type"
-                
-                # --- Setup and Run Logic based on OS ---
-                # NOTE: This block simplifies the previous Linux/macOS/Windows job logic into a single step for sequential randomization.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
 
-                CLONE_DIR="ESET-KeyGen"
-                
-                # Clone the repository
-                if [ -d "$CLONE_DIR" ]; then
-                  rm -rf "$CLONE_DIR"
-                fi
-                git clone -b $BRANCH $REPO_URL $CLONE_DIR
-                cd $CLONE_DIR
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
-                # Setup Python environment
-                python3 -m venv venv
-                source venv/bin/activate
-                pip install -r requirements.txt
+      - name: Process Results and Generate Markdown
+        id: process
+        run: |
+          # Tìm file KEYS.txt đầu tiên trong tất cả các artifact đã tải xuống
+          KEY_FILE=$(find artifacts -name "*KEYS.txt" -type f | head -n 1)
 
-                # Run the generation script for key (using input defaults if needed)
-                python3 main.py --auto-detect-browser $key_type --email-api $mail --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${{ github.event.inputs.key }} > generation_log.txt 2>&1
-
-                # Check if KEYS.txt was created and has content (indicating success)
-                if [ -s ./*KEYS.txt ]; then
-                  echo "Successfully generated key!"
-                  # Read the generated key details and format them for the markdown table
-                  # Note: ESET-KeyGen often outputs the key details in a specific format to a file. 
-                  # We assume the KEYS.txt contains the necessary information for the table fields or a single key/account line.
-                  
-                  # This section needs to parse the generated output. 
-                  # Since we don't know the exact format of *KEYS.txt, we assume a simple capture for demonstration.
-                  
-                  # If *KEYS.txt contains: Key, Username, Password, Expires Date (separated by tabs/spaces or on one line)
-                  KEY_DATA=$(cat ./*KEYS.txt)
-                  
-                  # Append to output.md
-                  echo "| $key_type | $KEY_DATA |" >> ../output.md
-                  
-                  SUCCESS=1
-                  break 3 # Exit all loops
-                fi
-                
-                # Cleanup if generation failed for this iteration
-                cd ..
-                rm -rf $CLONE_DIR
-              done
-            done
-          done
-
-          # Check final status
-          if [ $SUCCESS -eq 0 ]; then
-            echo "Error: Failed to generate a key after trying all combinations."
+          if [ -z "$KEY_FILE" ]; then
+            echo "::error::Failed to generate any key after trying all combinations."
+            echo "status=failure" >> $GITHUB_OUTPUT
             exit 1
           fi
 
-      - name: Upload output file to workflow artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-keys
-          path: output.md
+          echo "SUCCESS: Found a generated key."
+          echo "status=success" >> $GITHUB_OUTPUT
+
+          # Trích xuất thông tin từ tên thư mục artifact
+          # Ví dụ tên thư mục: key-data-ubuntu-latest-1secmail---key
+          ARTIFACT_DIR=$(dirname "$KEY_FILE")
+          DIR_NAME=$(basename "$ARTIFACT_DIR")
+          KEY_TYPE=$(echo "$DIR_NAME" | awk -F'-' '{print $NF}')
+
+          # Đọc nội dung key từ file (giả sử định dạng là: Key: ... | Password: ... | Expires: ...)
+          CONTENT=$(cat "$KEY_FILE")
+          KEY=$(echo "$CONTENT" | sed -n 's/.*Key: \([^|]*\).*/\1/p' | xargs)
+          PASS=$(echo "$CONTENT" | sed -n 's/.*Password: \([^|]*\).*/\1/p' | xargs)
+          EXPIRES=$(echo "$CONTENT" | sed -n 's/.*Expires: \([^|]*\).*/\1/p' | xargs)
+          USER="N/A" # Script không cung cấp username, nên ta để mặc định
+
+          # Tạo file markdown
+          MD_FILE="GENERATED_KEY.md"
+          echo "| Key Type | Key | Username | Password | Expires Date |" > $MD_FILE
+          echo "|---|---|---|---|---|" >> $MD_FILE
+          echo "| \`${KEY_TYPE}\` | \`${KEY}\` | ${USER} | \`${PASS}\` | ${EXPIRES} |" >> $MD_FILE
+
+          echo "Markdown file '$MD_FILE' created:"
+          cat $MD_FILE
+
+      - name: Commit and Push Markdown File
+        if: steps.process.outputs.status == 'success'
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add GENERATED_KEY.md
+          # Chỉ commit nếu có thay đổi
+          if git diff-index --quiet HEAD; then
+            echo "No changes to commit."
+          else
+            git commit -m "feat: Add generated ESET key"
+            git push origin ${{ github.event.inputs.branch }}
+          fi
+          
+      - name: Report Failure
+        if: steps.process.outputs.status == 'failure'
+        run: |
+          echo "Workflow failed because no key could be generated."
+          exit 1
