@@ -20,14 +20,9 @@ jobs:
           source venv/bin/activate
           pip install -r requirements.txt
 
-      - name: Run key generation script
-        shell: bash
+      - name: Write python script to file
         run: |
-          set -e
-          cd ESET-KeyGen
-          source venv/bin/activate
-
-          python3 - << 'EOF'
+          cat > generate_keys.py <<EOF
 import random
 import subprocess
 import os
@@ -95,6 +90,12 @@ with open("../eset_keys.md", "w") as f:
     f.write("|-----|----------|----------|---------------|-----------|\n")
     f.write(f"| `{key_data['key']}` | `{key_data['username']}` | `{key_data['password']}` | {key_data['expires']} | {key_data['key_type']} |\n")
 EOF
+
+      - name: Run key generation python script
+        run: |
+          cd ESET-KeyGen
+          source venv/bin/activate
+          python3 ../generate_keys.py
 
       - name: Show generated keys file
         run: cat eset_keys.md
