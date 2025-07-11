@@ -1,163 +1,100 @@
-name: Generator
+name: ESET Random Generator
 
 on:
   workflow_dispatch:
-    inputs:
-      account:
-        description: 'Number of Accounts to be generated (default = 0)'
-        required: false
-        default: '0'
-      key:
-        description: 'Number of Keys to be generated (default = 1)'
-        required: false
-        default: '1'
-      mail:
-        description: 'Choose the mail provider to generate license'
-        required: true
-        type: choice
-        options:
-        - 1secmail
-        - guerrillamail
-        - developermail
-        - mailticking
-        - fakemail
-        - inboxes
-        - incognitomail
-        - emailfake
-        default: emailfake
-      key_type:
-        description: 'Modes of operation'
-        required: true
-        type: choice
-        options:
-        - --key
-        - --small-business-key
-        default: --key
-      os:
-        description: 'Operating System of runner'
-        required: true
-        type: choice
-        options:
-        - macOS
-        - Linux
-        - Windows
-        default: macOS
-      branch:
-        description: "Repository branch (don't touch it if you don't know what it is!!!)"
-        required: false
-        type: choice
-        options:
-        - main
-        - test
-        default: main
+
 jobs:
-  Linux:
+  generate-key:
     runs-on: ubuntu-latest
     steps:
-      - name: Generate key
-        if: github.event.inputs.os == 'Linux'
-        run: |
-          ACCOUNT=${{ github.event.inputs.account }}
-          KEY=${{ github.event.inputs.key }}
-          MAIL=${{ github.event.inputs.mail }}
-          KEY_TYPE=${{ github.event.inputs.key_type }}
-          BRANCH=${{ github.event.inputs.branch }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-          git clone -b ${BRANCH} https://github.com/rzc0d3r/ESET-KeyGen.git
-          cd ESET-KeyGen
-          
-          # Setup env
+      - name: Install Python & system dependencies
+        run: |
           sudo apt update
-          sudo apt install -y python3-pip python3-venv
+          sudo apt install -y python3-pip python3-venv git
+
+      - name: Clone ESET KeyGen
+        run: |
+          git clone https://github.com/rzc0d3r/ESET-KeyGen.git
+          cd ESET-KeyGen
           python3 -m venv venv
           source venv/bin/activate
           pip install -r requirements.txt
-          
-          
-          if [[ ${ACCOUNT} -ne 0 && ${KEY} -ne 0 ]]; then
-            python3 main.py --auto-detect-browser --account --email-api ${MAIL} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${ACCOUNT}
-            python3 main.py --auto-detect-browser ${KEY_TYPE} --email-api ${MAIL} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${KEY}
-            echo "Account:" >> $GITHUB_STEP_SUMMARY
-            cat ./*ACCOUNTS.txt >> $GITHUB_STEP_SUMMARY
-            echo -e "\nKey:" >> $GITHUB_STEP_SUMMARY
-            cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY
-          elif [[ ${ACCOUNT} -ne 0 ]]; then
-            python3 main.py --auto-detect-browser --account --email-api ${MAIL} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${ACCOUNT}
-            echo -e "\nAccount:" >> $GITHUB_STEP_SUMMARY
-            cat ./*ACCOUNTS.txt >> $GITHUB_STEP_SUMMARY
-          elif [[ ${KEY} -ne 0 ]]; then
-            python3 main.py --auto-detect-browser ${KEY_TYPE} --email-api ${MAIL} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${KEY}
-            echo -e "\nKey:" >> $GITHUB_STEP_SUMMARY
-            cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY
-          fi
-  macOS:
-    runs-on: macos-latest
-    steps:
-      - name: Generate key
-        if: github.event.inputs.os == 'macOS'
+          cd ..
+
+      - name: Run randomized keygen with retries
         run: |
-          ACCOUNT=${{ github.event.inputs.account }}
-          KEY=${{ github.event.inputs.key }}
-          MAIL=${{ github.event.inputs.mail }}
-          KEY_TYPE=${{ github.event.inputs.key_type }}
+          import random
+          import subprocess
+          import os
+          from itertools import product
 
-          git clone https://github.com/rzc0d3r/ESET-KeyGen.git
-          cd ESET-KeyGen
-          
-          # Setup env
-          brew install python
-          python3 -m venv venv
-          source venv/bin/activate
-          pip install -r requirements.txt
+          os_list = ["Windows", "macOS", "Linux"]
+          mail_list = ["1secmail", "guerrillamail", "developermail", "mailticking", "fakemail", "inboxes", "incognitomail", "emailfake"]
+          key_types = ["--key", "--small-business-key"]
 
-          if [[ ${ACCOUNT} -ne 0 && ${KEY} -ne 0 ]]; then
-            python3 main.py --auto-detect-browser --account --email-api ${MAIL} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${ACCOUNT}
-            python3 main.py --auto-detect-browser ${KEY_TYPE} --email-api ${MAIL} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${KEY}
-            echo "Account:" >> $GITHUB_STEP_SUMMARY
-            cat ./*ACCOUNTS.txt >> $GITHUB_STEP_SUMMARY
-            echo -e "\nKey:" >> $GITHUB_STEP_SUMMARY
-            cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY
-          elif [[ ${ACCOUNT} -ne 0 ]]; then
-            python3 main.py --auto-detect-browser --account --email-api ${MAIL} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${ACCOUNT}
-            echo -e "\nAccount:" >> $GITHUB_STEP_SUMMARY
-            cat ./*ACCOUNTS.txt >> $GITHUB_STEP_SUMMARY
-          elif [[ ${KEY} -ne 0 ]]; then
-            python3 main.py --auto-detect-browser ${KEY_TYPE} --email-api ${MAIL} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${KEY}
-            echo -e "\nKey:" >> $GITHUB_STEP_SUMMARY
-            cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY
-          fi
-  Windows:
-    runs-on: windows-latest
-    steps:
-      - name: Generate key
-        if: github.event.inputs.os == 'Windows'
+          combinations = list(product(os_list, mail_list, key_types))
+          random.shuffle(combinations)
+
+          success = False
+          key_data = []
+
+          for os_name, mail, key_type in combinations:
+              print(f"🔁 Trying: OS={os_name}, Mail={mail}, Type={key_type}")
+              try:
+                  env = os.environ.copy()
+                  cmd = [
+                      "bash", "-c",
+                      f"""
+                      cd ESET-KeyGen && \
+                      source venv/bin/activate && \
+                      python3 main.py {key_type} --email-api {mail} --auto-detect-browser --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat 1
+                      """
+                  ]
+                  result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+                  if result.returncode == 0:
+                      print("✅ main.py executed successfully")
+                      files = os.listdir("ESET-KeyGen")
+                      key_file = next((f for f in files if f.endswith("KEYS.txt")), None)
+                      if key_file:
+                          with open(f"ESET-KeyGen/{key_file}") as f:
+                              lines = f.readlines()
+                              for line in lines:
+                                  parts = line.strip().split("|")
+                                  if len(parts) >= 4:
+                                      key_data = {
+                                          "key": parts[0].strip(),
+                                          "username": parts[1].strip(),
+                                          "password": parts[2].strip(),
+                                          "expires": parts[3].strip(),
+                                          "key_type": key_type
+                                      }
+                                      success = True
+                                      break
+                  if success:
+                      break
+              except Exception as e:
+                  print(f"❌ Error: {e}")
+                  continue
+
+          if not success:
+              print("❌ All combinations failed.")
+              exit(1)
+
+          print("📝 Writing to eset_keys.md")
+          with open("eset_keys.md", "w") as f:
+              f.write("# ✅ ESET License Key\n\n")
+              f.write("| key | username | password | expires date | key type |\n")
+              f.write("|-----|----------|----------|---------------|-----------|\n")
+              f.write(f"| `{key_data['key']}` | `{key_data['username']}` | `{key_data['password']}` | {key_data['expires']} | {key_data['key_type']} |\n")
+
+      - name: Commit and push `eset_keys.md`
+        if: success()
         run: |
-          $ACCOUNT="${{ github.event.inputs.account }}"
-          $KEY="${{ github.event.inputs.key }}"
-          $MAIL="${{ github.event.inputs.mail }}"
-          $KEY_TYPE="${{ github.event.inputs.key_type }}"
-
-          git clone https://github.com/rzc0d3r/ESET-KeyGen.git
-          cd ESET-KeyGen
-
-          # Setup dependencies
-          pip install -r requirements.txt
-
-          if ($ACCOUNT -ne 0 -and $KEY -ne 0) {
-              python3 main.py --auto-detect-browser --account --email-api $MAIL --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $ACCOUNT
-              python3 main.py --auto-detect-browser $KEY_TYPE --email-api $MAIL --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $KEY
-              echo "Account:" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-              Get-Content -Path ./*ACCOUNTS.txt | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-              echo "`nKey:" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-              Get-Content -Path ./*KEYS.txt | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          }
-          elseif ($ACCOUNT -ne 0) {
-              python3 main.py --auto-detect-browser --account --email-api $MAIL --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $ACCOUNT
-              echo "`nAccount:" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-              Get-Content -Path ./*ACCOUNTS.txt | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          }
-          elseif ($KEY -ne 0) {
-              python3 main.py --auto-detect-browser $KEY_TYPE --email-api $MAIL --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $KEY
-              echo "`nKey:" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-              Get-Content -Path ./*KEYS.txt | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          }
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add eset_keys.md
+          git commit -m "🔐 Add new ESET key"
+          git push
