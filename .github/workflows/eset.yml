@@ -23,7 +23,7 @@ jobs:
 
       - name: Write Python script to file
         run: |
-          cat <<'EOF' > ESET-KeyGen/generate_keys.py
+cat <<'EOF' > ESET-KeyGen/generate_keys.py
 import random
 import subprocess
 import os
@@ -90,10 +90,10 @@ if not success:
 
 print("📝 Writing to eset_keys.md")
 with open("../eset_keys.md", "w") as f:
-    f.write("# ✅ ESET License Key\n\n")
-    f.write("| key | username | password | expires date | key type |\n")
-    f.write("|-----|----------|----------|---------------|-----------|\n")
-    f.write(f"| `{key_data['key']}` | `{key_data['username']}` | `{key_data['password']}` | {key_data['expires']} | {key_data['key_type']} |\n")
+    f.write("# ✅ ESET License Key\\n\\n")
+    f.write("| key | username | password | expires date | key type |\\n")
+    f.write("|-----|----------|----------|---------------|-----------|\\n")
+    f.write(f"| `{key_data['key']}` | `{key_data['username']}` | `{key_data['password']}` | {key_data['expires']} | {key_data['key_type']} |\\n")
 EOF
 
       - name: Run key generation script
