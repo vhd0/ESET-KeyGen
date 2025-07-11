@@ -11,19 +11,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup environment and clone repo
+      - name: Setup Python and clone generator
         run: |
           sudo apt update
-          sudo apt install -y python3-pip python3-venv git
+          sudo apt install -y python3-venv python3-pip git
           git clone https://github.com/rzc0d3r/ESET-KeyGen.git
-          cd ESET-KeyGen
-          python3 -m venv venv
-          source venv/bin/activate
-          pip install -r requirements.txt
+          python3 -m venv ESET-KeyGen/venv
+          source ESET-KeyGen/venv/bin/activate
+          pip install -r ESET-KeyGen/requirements.txt
 
-      - name: Write Python script to file
+      - name: Generate keys using randomized logic
         run: |
-cat <<'EOF' > ESET-KeyGen/generate_keys.py
+          cat << 'EOF' > generate_keys.py
 import random
 import subprocess
 import os
@@ -38,13 +37,13 @@ mail_list = [
 ]
 key_types = ["--key", "--small-business-key"]
 
-combinations = list(product(os_list, mail_list, key_types))
-random.shuffle(combinations)
+combos = list(product(os_list, mail_list, key_types))
+random.shuffle(combos)
 
 success = False
 key_data = {}
 
-for os_name, mail, key_type in combinations:
+for os_name, mail, key_type in combos:
     print(f"🔁 Trying: OS={os_name}, Mail={mail}, Type={key_type}")
     try:
         command = f'''
@@ -59,8 +58,7 @@ for os_name, mail, key_type in combinations:
         if result.returncode != 0:
             continue
 
-        files = os.listdir(".")
-        key_file = next((f for f in files if f.endswith("KEYS.txt")), None)
+        key_file = next((f for f in os.listdir(".") if f.endswith("KEYS.txt")), None)
         if not key_file:
             continue
 
@@ -77,34 +75,29 @@ for os_name, mail, key_type in combinations:
                     }
                     success = True
                     break
-
         if success:
             print("✅ Key successfully retrieved. Breaking loop.")
             break
-
     except Exception as e:
-        print(f"❌ Exception occurred: {e}")
+        print(f"❌ Exception: {e}")
         continue
 
 if not success:
     print("❌ All combinations failed.")
     exit(1)
 
-print("📝 Writing to eset_keys.md")
+print("📝 Writing to ../eset_keys.md")
 with open("../eset_keys.md", "w") as f:
-    f.write("# ✅ ESET License Key\\n\\n")
-    f.write("| key | username | password | expires date | key type |\\n")
-    f.write("|-----|----------|----------|---------------|-----------|\\n")
-    f.write(f"| `{key_data['key']}` | `{key_data['username']}` | `{key_data['password']}` | {key_data['expires']} | {key_data['key_type']} |\\n")
+    f.write("# ✅ ESET License Key\n\n")
+    f.write("| key | username | password | expires date | key type |\n")
+    f.write("|-----|----------|----------|---------------|-----------|\n")
+    f.write(f"| `{key_data['key']}` | `{key_data['username']}` | `{key_data['password']}` | {key_data['expires']} | {key_data['key_type']} |\n")
 EOF
 
-      - name: Run key generation script
-        run: |
-          cd ESET-KeyGen
-          source venv/bin/activate
+          source ESET-KeyGen/venv/bin/activate
           python3 generate_keys.py
 
-      - name: Show generated keys file
+      - name: Show generated result
         run: cat eset_keys.md
 
       - name: Commit and push keys file
@@ -112,6 +105,6 @@ EOF
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           git add eset_keys.md
-          git commit -m "🔐 Add new ESET license key"
+          git commit -m "🔐 Add new ESET key"
           git push
         continue-on-error: true
