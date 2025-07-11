@@ -16,7 +16,7 @@ jobs:
           sudo apt update
           sudo apt install -y python3-pip python3-venv git
 
-      - name: Clone ESET-KeyGen and setup venv
+      - name: Clone ESET-KeyGen and setup virtualenv
         run: |
           git clone https://github.com/rzc0d3r/ESET-KeyGen.git
           cd ESET-KeyGen
@@ -27,7 +27,7 @@ jobs:
 
       - name: Run key generation with randomized combinations
         run: |
-          cat << EOF > generate_keys.py
+          cat << 'EOF' > generate_keys.py
           import random
           import subprocess
           import os
