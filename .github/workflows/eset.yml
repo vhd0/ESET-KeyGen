@@ -29,6 +29,8 @@ import subprocess
 import os
 from itertools import product
 
+os.chdir("ESET-KeyGen")
+
 os_list = ["Windows", "macOS", "Linux"]
 mail_list = [
     "1secmail", "guerrillamail", "developermail", "mailticking",
