@@ -25,76 +25,74 @@ jobs:
           pip install -r requirements.txt
           cd ..
 
-      - name: Run key generation with randomized combinations
+      - name: Write generate_keys.py to file
         run: |
-          cat << 'EOF' > generate_keys.py
-          import random
-          import subprocess
-          import os
-          from itertools import product
+          echo "import random" >> generate_keys.py
+          echo "import subprocess" >> generate_keys.py
+          echo "import os" >> generate_keys.py
+          echo "from itertools import product" >> generate_keys.py
+          echo "" >> generate_keys.py
+          echo "os_list = [\"Windows\", \"macOS\", \"Linux\"]" >> generate_keys.py
+          echo "mail_list = [\"1secmail\", \"guerrillamail\", \"developermail\", \"mailticking\", \"fakemail\", \"inboxes\", \"incognitomail\", \"emailfake\"]" >> generate_keys.py
+          echo "key_types = [\"--key\", \"--small-business-key\"]" >> generate_keys.py
+          echo "" >> generate_keys.py
+          echo "combinations = list(product(os_list, mail_list, key_types))" >> generate_keys.py
+          echo "random.shuffle(combinations)" >> generate_keys.py
+          echo "" >> generate_keys.py
+          echo "success = False" >> generate_keys.py
+          echo "key_data = {}" >> generate_keys.py
+          echo "" >> generate_keys.py
+          echo "for os_name, mail, key_type in combinations:" >> generate_keys.py
+          echo "    print(f\"🔁 Trying: OS={os_name}, Mail={mail}, Type={key_type}\")" >> generate_keys.py
+          echo "    try:" >> generate_keys.py
+          echo "        cmd = [" >> generate_keys.py
+          echo "            \"bash\", \"-c\"," >> generate_keys.py
+          echo "            f\"\"\"" >> generate_keys.py
+          echo "            cd ESET-KeyGen && \\" >> generate_keys.py
+          echo "            source venv/bin/activate && \\" >> generate_keys.py
+          echo "            python3 main.py {key_type} --email-api {mail} --auto-detect-browser --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat 1" >> generate_keys.py
+          echo "            \"\"\"" >> generate_keys.py
+          echo "        ]" >> generate_keys.py
+          echo "        result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)" >> generate_keys.py
+          echo "        print(result.stdout)" >> generate_keys.py
+          echo "        print(result.stderr)" >> generate_keys.py
+          echo "        if result.returncode == 0:" >> generate_keys.py
+          echo "            files = os.listdir(\"ESET-KeyGen\")" >> generate_keys.py
+          echo "            key_file = next((f for f in files if f.endswith(\"KEYS.txt\")), None)" >> generate_keys.py
+          echo "            if key_file:" >> generate_keys.py
+          echo "                with open(f\"ESET-KeyGen/{key_file}\") as f:" >> generate_keys.py
+          echo "                    lines = f.readlines()" >> generate_keys.py
+          echo "                    for line in lines:" >> generate_keys.py
+          echo "                        parts = line.strip().split(\"|\")" >> generate_keys.py
+          echo "                        if len(parts) >= 4:" >> generate_keys.py
+          echo "                            key_data = {" >> generate_keys.py
+          echo "                                \"key\": parts[0].strip()," >> generate_keys.py
+          echo "                                \"username\": parts[1].strip()," >> generate_keys.py
+          echo "                                \"password\": parts[2].strip()," >> generate_keys.py
+          echo "                                \"expires\": parts[3].strip()," >> generate_keys.py
+          echo "                                \"key_type\": key_type" >> generate_keys.py
+          echo "                            }" >> generate_keys.py
+          echo "                            success = True" >> generate_keys.py
+          echo "                            break" >> generate_keys.py
+          echo "    except Exception as e:" >> generate_keys.py
+          echo "        print(f\"❌ Error: {e}\")" >> generate_keys.py
+          echo "        continue" >> generate_keys.py
+          echo "    if success:" >> generate_keys.py
+          echo "        break" >> generate_keys.py
+          echo "" >> generate_keys.py
+          echo "if not success:" >> generate_keys.py
+          echo "    print(\"❌ All combinations failed.\")" >> generate_keys.py
+          echo "    exit(1)" >> generate_keys.py
+          echo "" >> generate_keys.py
+          echo "print(\"📝 Writing to eset_keys.md\")" >> generate_keys.py
+          echo "with open(\"eset_keys.md\", \"w\") as f:" >> generate_keys.py
+          echo "    f.write(\"# ✅ ESET License Key\\n\\n\")" >> generate_keys.py
+          echo "    f.write(\"| key | username | password | expires date | key type |\\n\")" >> generate_keys.py
+          echo "    f.write(\"|-----|----------|----------|---------------|-----------|\\n\")" >> generate_keys.py
+          echo "    f.write(f\"| `{key_data['key']}` | `{key_data['username']}` | `{key_data['password']}` | {key_data['expires']} | {key_data['key_type']} |\\n\")" >> generate_keys.py
 
-          os_list = ["Windows", "macOS", "Linux"]
-          mail_list = ["1secmail", "guerrillamail", "developermail", "mailticking", "fakemail", "inboxes", "incognitomail", "emailfake"]
-          key_types = ["--key", "--small-business-key"]
-
-          combinations = list(product(os_list, mail_list, key_types))
-          random.shuffle(combinations)
-
-          success = False
-          key_data = {}
-
-          for os_name, mail, key_type in combinations:
-              print(f"🔁 Trying: OS={os_name}, Mail={mail}, Type={key_type}")
-              try:
-                  cmd = [
-                      "bash", "-c",
-                      f"""
-                      cd ESET-KeyGen && \
-                      source venv/bin/activate && \
-                      python3 main.py {key_type} --email-api {mail} --auto-detect-browser --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat 1
-                      """
-                  ]
-                  result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
-                  print(result.stdout)
-                  print(result.stderr)
-                  if result.returncode == 0:
-                      files = os.listdir("ESET-KeyGen")
-                      key_file = next((f for f in files if f.endswith("KEYS.txt")), None)
-                      if key_file:
-                          with open(f"ESET-KeyGen/{key_file}") as f:
-                              lines = f.readlines()
-                              for line in lines:
-                                  parts = line.strip().split("|")
-                                  if len(parts) >= 4:
-                                      key_data = {
-                                          "key": parts[0].strip(),
-                                          "username": parts[1].strip(),
-                                          "password": parts[2].strip(),
-                                          "expires": parts[3].strip(),
-                                          "key_type": key_type
-                                      }
-                                      success = True
-                                      break
-              except Exception as e:
-                  print(f"❌ Error: {e}")
-                  continue
-
-              if success:
-                  break
-
-          if not success:
-              print("❌ All combinations failed.")
-              exit(1)
-
-          print("📝 Writing to eset_keys.md")
-          with open("eset_keys.md", "w") as f:
-              f.write("# ✅ ESET License Key\\n\\n")
-              f.write("| key | username | password | expires date | key type |\\n")
-              f.write("|-----|----------|----------|---------------|-----------|\\n")
-              f.write(f"| `{key_data['key']}` | `{key_data['username']}` | `{key_data['password']}` | {key_data['expires']} | {key_data['key_type']} |\\n")
-          EOF
-
-          python3 generate_keys.py
+      - name: Run Python keygen
+        run: python3 generate_keys.py
 
       - name: Commit and push eset_keys.md
         run: |
