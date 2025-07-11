@@ -22,7 +22,7 @@ jobs:
 
       - name: Write python script to file
         run: |
-          cat > generate_keys.py <<EOF
+          cat > ESET-KeyGen/generate_keys.py <<EOF
 import random
 import subprocess
 import os
@@ -95,7 +95,7 @@ EOF
         run: |
           cd ESET-KeyGen
           source venv/bin/activate
-          python3 ../generate_keys.py
+          python3 generate_keys.py
 
       - name: Show generated keys file
         run: cat eset_keys.md
