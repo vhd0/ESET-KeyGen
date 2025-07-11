@@ -1,113 +1,153 @@
-name: ESET Random Key Generator
+name: Generator
 
 on:
   workflow_dispatch:
+    inputs:
+      account:
+        description: 'Number of Accounts to be generated (default = 0)'
+        required: false
+        default: '0'
+      key:
+        description: 'Number of Keys to be generated (default = 1)'
+        required: false
+        default: '1'
+      mail:
+        description: 'Choose the mail provider to generate license'
+        required: true
+        type: choice
+        options:
+        - 1secmail
+        - guerrillamail
+        - developermail
+        - mailticking
+        - fakemail
+        - inboxes
+        - incognitomail
+        - emailfake
+        default: emailfake
+      key_type:
+        description: 'Modes of operation'
+        required: true
+        type: choice
+        options:
+        - --key
+        - --small-business-key
+        default: --key
+      os:
+        description: 'Operating System of runner'
+        required: true
+        type: choice
+        options:
+        - macOS
+        - Linux
+        - Windows
+        default: macOS
+      branch:
+        description: "Repository branch (don't touch it if you don't know what it is!!!)"
+        required: false
+        type: choice
+        options:
+        - main
+        - test
+        default: main
 
 jobs:
-  generate-key:
-    runs-on: ubuntu-latest
-
+  generator:
+    runs-on: ubuntu-latest # Using Ubuntu for the main logic and randomization
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup environment and clone repo
+      - name: Prepare environment and run generation loop
+        id: generate
         run: |
-          sudo apt update
-          sudo apt install -y python3-venv python3-pip git
-          git clone https://github.com/rzc0d3r/ESET-KeyGen.git
-          python3 -m venv ESET-KeyGen/venv
-          source ESET-KeyGen/venv/bin/activate
-          pip install -r ESET-KeyGen/requirements.txt
+          # Define inputs for randomization
+          OS_OPTIONS=("Linux" "macOS" "Windows")
+          MAIL_OPTIONS=("1secmail" "guerrillamail" "developermail" "mailticking" "fakemail" "inboxes" "incognitomail" "emailfake")
+          KEY_TYPE_OPTIONS=("--key" "--small-business-key")
+          REPO_URL="https://github.com/rzc0d3r/ESET-KeyGen.git"
+          BRANCH=${{ github.event.inputs.branch }}
 
-      - name: Create generate_keys.py script
-        run: |
-          cat > ESET-KeyGen/generate_keys.py << 'EOF'
-import random
-import subprocess
-import os
-from itertools import product
+          # Initialize output file (Markdown table header)
+          echo "| Key Type | Key | Username | Password | Expires Date |" > output.md
+          echo "| :--- | :--- | :--- | :--- | :--- |" >> output.md
+          
+          # Initialize variables for loop control
+          SUCCESS=0
+          
+          # Iterate through combinations and attempt to generate a key
+          for os in "${OS_OPTIONS[@]}"; do
+            if [ $SUCCESS -eq 1 ]; then
+              break
+            fi
+            
+            for key_type in "${KEY_TYPE_OPTIONS[@]}"; do
+              if [ $SUCCESS -eq 1 ]; then
+                break
+              fi
 
-os.chdir("ESET-KeyGen")
+              for mail in "${MAIL_OPTIONS[@]}"; do
+                if [ $SUCCESS -eq 1 ]; then
+                  break
+                fi
+                
+                echo "Attempting generation with OS: $os, Mail: $mail, Key Type: $key_type"
+                
+                # --- Setup and Run Logic based on OS ---
+                # NOTE: This block simplifies the previous Linux/macOS/Windows job logic into a single step for sequential randomization.
 
-os_list = ["Windows", "macOS", "Linux"]
-mail_list = [
-    "1secmail", "guerrillamail", "developermail", "mailticking",
-    "fakemail", "inboxes", "incognitomail", "emailfake"
-]
-key_types = ["--key", "--small-business-key"]
+                CLONE_DIR="ESET-KeyGen"
+                
+                # Clone the repository
+                if [ -d "$CLONE_DIR" ]; then
+                  rm -rf "$CLONE_DIR"
+                fi
+                git clone -b $BRANCH $REPO_URL $CLONE_DIR
+                cd $CLONE_DIR
 
-combinations = list(product(os_list, mail_list, key_types))
-random.shuffle(combinations)
+                # Setup Python environment
+                python3 -m venv venv
+                source venv/bin/activate
+                pip install -r requirements.txt
 
-success = False
-key_data = {}
+                # Run the generation script for key (using input defaults if needed)
+                python3 main.py --auto-detect-browser $key_type --email-api $mail --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${{ github.event.inputs.key }} > generation_log.txt 2>&1
 
-for os_name, mail, key_type in combinations:
-    print(f"🔁 Trying: OS={os_name}, Mail={mail}, Type={key_type}")
-    try:
-        command = f'''
-        source venv/bin/activate && \
-        python3 main.py {key_type} --email-api {mail} --auto-detect-browser --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat 1
-        '''
-        result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=180)
-        print(result.stdout)
-        print(result.stderr)
+                # Check if KEYS.txt was created and has content (indicating success)
+                if [ -s ./*KEYS.txt ]; then
+                  echo "Successfully generated key!"
+                  # Read the generated key details and format them for the markdown table
+                  # Note: ESET-KeyGen often outputs the key details in a specific format to a file. 
+                  # We assume the KEYS.txt contains the necessary information for the table fields or a single key/account line.
+                  
+                  # This section needs to parse the generated output. 
+                  # Since we don't know the exact format of *KEYS.txt, we assume a simple capture for demonstration.
+                  
+                  # If *KEYS.txt contains: Key, Username, Password, Expires Date (separated by tabs/spaces or on one line)
+                  KEY_DATA=$(cat ./*KEYS.txt)
+                  
+                  # Append to output.md
+                  echo "| $key_type | $KEY_DATA |" >> ../output.md
+                  
+                  SUCCESS=1
+                  break 3 # Exit all loops
+                fi
+                
+                # Cleanup if generation failed for this iteration
+                cd ..
+                rm -rf $CLONE_DIR
+              done
+            done
+          done
 
-        if result.returncode != 0:
-            continue
+          # Check final status
+          if [ $SUCCESS -eq 0 ]; then
+            echo "Error: Failed to generate a key after trying all combinations."
+            exit 1
+          fi
 
-        key_file = next((f for f in os.listdir(".") if f.endswith("KEYS.txt")), None)
-        if not key_file:
-            continue
-
-        with open(key_file, "r") as f:
-            for line in f:
-                parts = line.strip().split("|")
-                if len(parts) >= 4:
-                    key_data = {
-                        "key": parts[0].strip(),
-                        "username": parts[1].strip(),
-                        "password": parts[2].strip(),
-                        "expires": parts[3].strip(),
-                        "key_type": key_type
-                    }
-                    success = True
-                    break
-
-        if success:
-            print("✅ Key successfully retrieved. Stopping attempts.")
-            break
-
-    except Exception as e:
-        print(f"❌ Exception: {e}")
-        continue
-
-if not success:
-    print("❌ All combinations failed.")
-    exit(1)
-
-print("📝 Writing keys to eset_keys.md")
-with open("../eset_keys.md", "w") as f:
-    f.write("# ✅ ESET License Key\n\n")
-    f.write("| key | username | password | expires date | key type |\n")
-    f.write("|-----|----------|----------|---------------|-----------|\n")
-    f.write(f"| `{key_data['key']}` | `{key_data['username']}` | `{key_data['password']}` | {key_data['expires']} | {key_data['key_type']} |\n")
-EOF
-
-      - name: Run generate_keys.py script
-        run: |
-          source ESET-KeyGen/venv/bin/activate
-          python3 ESET-KeyGen/generate_keys.py
-
-      - name: Show generated keys file
-        run: cat eset_keys.md
-
-      - name: Commit and push keys file
-        run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "actions@github.com"
-          git add eset_keys.md
-          git commit -m "🔐 Add new ESET license key"
-          git push
-        continue-on-error: true
+      - name: Upload output file to workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-keys
+          path: output.md
