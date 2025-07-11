@@ -1,161 +1,37 @@
-name: ESET Key Generator
+name: Automated ESET Key Generator
 
 on:
-  workflow_dispatch:
-    inputs:
-      account:
-        description: 'Number of Accounts to be generated (default = 0)'
-        required: false
-        default: '0'
-      key:
-        description: 'Number of Keys to be generated (default = 1)'
-        required: false
-        default: '1'
-      mail:
-        description: 'Choose the mail provider to generate license (preferred initial attempt)'
-        required: true
-        type: choice
-        options:
-          - 1secmail
-          - guerrillamail
-          - developermail
-          - mailticking
-          - fakemail
-          - inboxes
-          - incognitomail
-          - emailfake
-        default: emailfake
-      key_type:
-        description: 'Modes of operation (preferred initial attempt)'
-        required: true
-        type: choice
-        options:
-          - --key
-          - --small-business-key
-        default: --key
-      os:
-        description: 'Operating System of runner (preferred initial attempt)'
-        required: true
-        type: choice
-        options:
-          - macOS
-          - Linux
-          - Windows
-        default: macOS
-      branch:
-        description: "Repository branch (don't touch it if you don't know what it is!!!)"
-        required: false
-        type: choice
-        options:
-          - main
-          - test
-        default: main
+  # Workflow này sẽ tự động chạy khi có push lên nhánh 'main'
+  # Bạn có thể thay đổi thành 'schedule' để chạy định kỳ, ví dụ:
+  # schedule:
+  #   - cron: '0 0 * * *' # Chạy hàng ngày vào lúc 00:00 UTC
+
+  push:
+    branches:
+      - main
 
 jobs:
-  # Job đầu tiên để thử tạo khóa với các input ưu tiên của người dùng
-  preferred_generation:
-    runs-on: ${{ github.event.inputs.os == 'Windows' && 'windows-latest' || (github.event.inputs.os == 'macOS' && 'macos-latest' || 'ubuntu-latest') }}
-    outputs:
-      key_found: ${{ steps.check_key.outputs.key_found }}
-      key_details: ${{ steps.check_key.outputs.key_details }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Clone ESET-KeyGen repository
-        run: git clone -b ${{ github.event.inputs.branch }} https://github.com/rzc0d3r/ESET-KeyGen.git
-        working-directory: ${{ github.workspace }} # Đảm bảo clone vào thư mục gốc của workspace
-
-      - name: Setup Python environment
-        run: |
-          cd ESET-KeyGen
-          # Cài đặt các dependency Python tùy thuộc vào hệ điều hành của runner
-          if [ "${{ github.event.inputs.os }}" == "Linux" ]; then
-            sudo apt update
-            sudo apt install -y python3-pip python3-venv
-          elif [ "${{ github.event.inputs.os }}" == "macOS" ]; then
-            brew install python
-          elif [ "${{ github.event.inputs.os }}" == "Windows" ]; then
-            # Trên Windows, python và pip thường có sẵn. Chỉ cần tạo venv.
-            # GitHub Actions Windows runners thường có python được cài đặt sẵn và trong PATH.
-            echo "Setting up Python for Windows..."
-          fi
-          python3 -m venv venv
-          # Kích hoạt venv dựa trên OS
-          if [ "${{ github.event.inputs.os }}" == "Windows" ]; then
-            ./venv/Scripts/activate
-          else
-            source venv/bin/activate
-          fi
-          pip install -r requirements.txt
-        working-directory: ${{ github.workspace }} # Chạy từ thư mục gốc để ESET-KeyGen có thể truy cập
-
-      - name: Attempt key generation with preferred inputs
-        id: generate_preferred
-        run: |
-          cd ESET-KeyGen
-          python3 main.py --auto-detect-browser ${{ github.event.inputs.key_type }} --email-api ${{ github.event.inputs.mail }} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${{ github.event.inputs.key }}
-        working-directory: ${{ github.workspace }}
-        continue-on-error: true # Cho phép bước này thất bại mà không dừng job
-
-      - name: Check for generated key (preferred attempt)
-        id: check_key
-        shell: bash # Sử dụng bash cho xử lý chuỗi đa nền tảng
-        run: |
-          REPO_DIR="ESET-KeyGen"
-          KEY_FILE=$(find "$REPO_DIR" -name "*KEYS.txt" -print -quit)
-          ACCOUNT_FILE=$(find "$REPO_DIR" -name "*ACCOUNTS.txt" -print -quit)
-          KEY_DETAILS=""
-          KEY_FOUND="false"
-
-          if [ -f "$KEY_FILE" ] && grep -q "Key:" "$KEY_FILE"; then
-            echo "Key found in preferred attempt!"
-            KEY_FOUND="true"
-
-            # Trích xuất Key và Expires Date
-            KEY_LINE=$(grep "Key:" "$KEY_FILE" | head -n 1)
-            KEY=$(echo "$KEY_LINE" | sed -E 's/.*Key: ([^|]+).*/\1/' | xargs)
-            EXPIRES_DATE=$(echo "$KEY_LINE" | sed -E 's/.*Expires: (.*)/\1/' | xargs)
-
-            USERNAME=""
-            PASSWORD=""
-            # Trích xuất Username và Password nếu có file ACCOUNTS.txt
-            if [ -f "$ACCOUNT_FILE" ] && grep -q "Username:" "$ACCOUNT_FILE"; then
-              ACCOUNT_LINE=$(grep "Username:" "$ACCOUNT_FILE" | head -n 1)
-              USERNAME=$(echo "$ACCOUNT_LINE" | sed -E 's/.*Username: ([^|]+).*/\1/' | xargs)
-              PASSWORD=$(echo "$ACCOUNT_LINE" | sed -E 's/.*Password: (.*)/\1/' | xargs)
-            fi
-
-            # Định dạng cho hàng bảng markdown
-            KEY_DETAILS="| ${{ github.event.inputs.key_type }} | $KEY | $USERNAME | $PASSWORD | $EXPIRES_DATE |"
-            echo "key_found=true" >> "$GITHUB_OUTPUT"
-            echo "key_details=$KEY_DETAILS" >> "$GITHUB_OUTPUT"
-          else
-            echo "No key found in preferred attempt."
-            echo "key_found=false" >> "$GITHUB_OUTPUT"
-          fi
-        working-directory: ${{ github.workspace }}
-
-  # Job này sẽ lặp qua các kết hợp khác nếu lần thử ưu tiên thất bại
-  fallback_generation:
-    needs: preferred_generation
-    # Chỉ chạy job này nếu job preferred_generation không tìm thấy khóa
-    if: needs.preferred_generation.outputs.key_found == 'false'
+  # Job chính để thử tạo khóa với các kết hợp ngẫu nhiên
+  generate_and_store_key:
+    # Sử dụng matrix để thử tất cả các kết hợp của OS, Mail API và Key Type
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false # Cho phép tất cả các kết hợp chạy ngay cả khi một số thất bại
+      fail-fast: false # Đảm bảo tất cả các kết hợp được thử, ngay cả khi một số thất bại
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         mail: [1secmail, guerrillamail, developermail, mailticking, fakemail, inboxes, incognitomail, emailfake]
         key_type: [--key, --small-business-key]
+        # Số lượng khóa và tài khoản sẽ được cố định hoặc lấy từ biến môi trường nếu cần
+        key_count: [1] # Luôn cố gắng tạo 1 khóa cho mỗi lần thử
+        account_count: [0] # Không tạo tài khoản trong các lần thử này
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Clone ESET-KeyGen repository
-        run: git clone -b ${{ github.event.inputs.branch }} https://github.com/rzc0d3r/ESET-KeyGen.git
-        working-directory: ${{ github.workspace }}
+        run: git clone https://github.com/rzc0d3r/ESET-KeyGen.git
+        working-directory: ${{ github.workspace }} # Đảm bảo clone vào thư mục gốc của workspace
 
       - name: Setup Python environment
         run: |
@@ -167,6 +43,7 @@ jobs:
           elif [ "${{ matrix.os }}" == "macos-latest" ]; then
             brew install python
           elif [ "${{ matrix.os }}" == "windows-latest" ]; then
+            # Trên Windows, python và pip thường có sẵn. Chỉ cần tạo venv.
             echo "Setting up Python for Windows..."
           fi
           python3 -m venv venv
@@ -177,23 +54,23 @@ jobs:
             source venv/bin/activate
           fi
           pip install -r requirements.txt
-        working-directory: ${{ github.workspace }}
+        working-directory: ${{ github.workspace }} # Chạy từ thư mục gốc để ESET-KeyGen có thể truy cập
 
       - name: Attempt key generation (${{ matrix.os }} / ${{ matrix.mail }} / ${{ matrix.key_type }})
-        id: generate_key
+        id: generate_key_attempt
         run: |
           cd ESET-KeyGen
-          python3 main.py --auto-detect-browser ${{ matrix.key_type }} --email-api ${{ matrix.mail }} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${{ github.event.inputs.key }}
+          python3 main.py --auto-detect-browser ${{ matrix.key_type }} --email-api ${{ matrix.mail }} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${{ matrix.key_count }}
         working-directory: ${{ github.workspace }}
-        continue-on-error: true # Cho phép bước này thất bại mà không dừng job
+        continue-on-error: true # Cho phép bước này thất bại mà không dừng job con của matrix
 
       - name: Check for generated key and prepare artifact
         id: check_and_prepare_artifact
-        shell: bash
+        shell: bash # Sử dụng bash cho xử lý chuỗi đa nền tảng
         run: |
           REPO_DIR="ESET-KeyGen"
           KEY_FILE=$(find "$REPO_DIR" -name "*KEYS.txt" -print -quit)
-          ACCOUNT_FILE=$(find "$REPO_DIR" -name "*ACCOUNTS.txt" -print -quit)
+          ACCOUNT_FILE=$(find "$REPO_DIR" -name "*ACCOUNTS.txt" -print -quit) # Có thể không tồn tại nếu không tạo account
           KEY_DETAILS=""
           KEY_FOUND="false"
 
@@ -216,6 +93,7 @@ jobs:
             fi
 
             # Định dạng cho hàng bảng markdown
+            # Sử dụng matrix.key_type để đảm bảo đúng loại khóa được ghi
             KEY_DETAILS="| ${{ matrix.key_type }} | $KEY | $USERNAME | $PASSWORD | $EXPIRES_DATE |"
             echo "$KEY_DETAILS" > generated_key_details.txt
             echo "key_found=true" >> "$GITHUB_OUTPUT"
@@ -236,7 +114,7 @@ jobs:
 
   # Job cuối cùng để thu thập khóa và ghi vào file Markdown
   finalize_key_output:
-    needs: [preferred_generation, fallback_generation] # Chờ cả hai job trước hoàn thành
+    needs: generate_and_store_key # Chờ job tạo khóa hoàn thành
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -260,26 +138,18 @@ jobs:
           KEY_FOUND_OVERALL="false"
           SUCCESSFUL_KEY_DETAIL=""
 
-          # Ưu tiên kiểm tra khóa từ lần thử ưu tiên
-          if [ "${{ needs.preferred_generation.outputs.key_found }}" == "true" ]; then
-            echo "Preferred key found. Adding to markdown."
-            SUCCESSFUL_KEY_DETAIL="${{ needs.preferred_generation.outputs.key_details }}"
-            KEY_FOUND_OVERALL="true"
-          else
-            echo "Preferred key not found. Checking fallback attempts..."
-            # Lặp qua các artifact đã tải xuống từ fallback_generation
-            for artifact_dir in artifacts/successful-key-*; do
-              if [ -d "$artifact_dir" ]; then
-                KEY_DETAILS_FILE="$artifact_dir/generated_key_details.txt"
-                if [ -f "$KEY_DETAILS_FILE" ]; then
-                  echo "Key found from fallback: $artifact_dir"
-                  SUCCESSFUL_KEY_DETAIL=$(cat "$KEY_DETAILS_FILE")
-                  KEY_FOUND_OVERALL="true"
-                  break # Dừng lại sau khi tìm thấy khóa thành công đầu tiên
-                fi
+          # Lặp qua các artifact đã tải xuống
+          for artifact_dir in artifacts/successful-key-*; do
+            if [ -d "$artifact_dir" ]; then
+              KEY_DETAILS_FILE="$artifact_dir/generated_key_details.txt"
+              if [ -f "$KEY_DETAILS_FILE" ]; then
+                echo "Key found from: $artifact_dir"
+                SUCCESSFUL_KEY_DETAIL=$(cat "$KEY_DETAILS_FILE")
+                KEY_FOUND_OVERALL="true"
+                break # Dừng lại sau khi tìm thấy khóa thành công đầu tiên
               fi
-            done
-          fi
+            fi
+          done
 
           if [ "$KEY_FOUND_OVERALL" == "true" ]; then
             echo "$SUCCESSFUL_KEY_DETAIL" >> "$MARKDOWN_FILE"
