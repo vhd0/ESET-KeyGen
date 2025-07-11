@@ -34,43 +34,49 @@ jobs:
         working-directory: ${{ github.workspace }} # Đảm bảo clone vào thư mục gốc của workspace
 
       - name: Setup Python environment
+        shell: bash # Sử dụng bash cho consistent shell commands across OSes
         run: |
-          cd ESET-KeyGen
           # Cài đặt các dependency Python tùy thuộc vào hệ điều hành của runner
           if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
             sudo apt update
             sudo apt install -y python3-pip python3-venv
           elif [ "${{ matrix.os }}" == "macos-latest" ]; then
             brew install python
-          elif [ "${{ matrix.os }}" == "windows-latest" ]; then
-            # Trên Windows, python và pip thường có sẵn. Chỉ cần tạo venv.
-            echo "Setting up Python for Windows..."
           fi
+
           python3 -m venv venv
-          # Kích hoạt venv dựa trên OS
+          # Kích hoạt venv
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            ./venv/Scripts/activate
+            source venv/Scripts/activate # For Git Bash on Windows runners
           else
             source venv/bin/activate
           fi
+          
+          python3 -m pip install --upgrade pip # Upgrade pip as good practice
           pip install -r requirements.txt
-        working-directory: ${{ github.workspace }} # Chạy từ thư mục gốc để ESET-KeyGen có thể truy cập
+        working-directory: ${{ github.workspace }}/ESET-KeyGen # Execute directly in the cloned repo
 
       - name: Attempt key generation (${{ matrix.os }} / ${{ matrix.mail }} / ${{ matrix.key_type }})
         id: generate_key_attempt
+        shell: bash # Sử dụng bash cho consistent shell commands across OSes
         run: |
-          cd ESET-KeyGen
+          # Kích hoạt venv trước khi chạy script
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            source venv/Scripts/activate # For Git Bash on Windows runners
+          else
+            source venv/bin/activate
+          fi
           python3 main.py --auto-detect-browser ${{ matrix.key_type }} --email-api ${{ matrix.mail }} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${{ matrix.key_count }}
-        working-directory: ${{ github.workspace }}
+        working-directory: ${{ github.workspace }}/ESET-KeyGen # Execute directly in the cloned repo
         continue-on-error: true # Cho phép bước này thất bại mà không dừng job con của matrix
 
       - name: Check for generated key and prepare artifact
         id: check_and_prepare_artifact
         shell: bash # Sử dụng bash cho xử lý chuỗi đa nền tảng
         run: |
-          REPO_DIR="ESET-KeyGen"
-          KEY_FILE=$(find "$REPO_DIR" -name "*KEYS.txt" -print -quit)
-          ACCOUNT_FILE=$(find "$REPO_DIR" -name "*ACCOUNTS.txt" -print -quit) # Có thể không tồn tại nếu không tạo account
+          # REPO_DIR is now the current working directory
+          KEY_FILE=$(find . -name "*KEYS.txt" -print -quit)
+          ACCOUNT_FILE=$(find . -name "*ACCOUNTS.txt" -print -quit) # Có thể không tồn tại nếu không tạo account
           KEY_DETAILS=""
           KEY_FOUND="false"
 
@@ -101,7 +107,7 @@ jobs:
             echo "No key found for this combination."
             echo "key_found=false" >> "$GITHUB_OUTPUT"
           fi
-        working-directory: ${{ github.workspace }}
+        working-directory: ${{ github.workspace }}/ESET-KeyGen # Execute directly in the cloned repo
 
       - name: Upload key artifact if found
         if: steps.check_and_prepare_artifact.outputs.key_found == 'true'
