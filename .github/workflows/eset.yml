@@ -11,7 +11,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python and clone repo
+      - name: Setup environment and clone repo
         run: |
           sudo apt update
           sudo apt install -y python3-venv python3-pip git
@@ -20,9 +20,10 @@ jobs:
           source ESET-KeyGen/venv/bin/activate
           pip install -r ESET-KeyGen/requirements.txt
 
-      - name: Create Python script
+      - name: Create generate_keys.py script
         run: |
-          echo 'import random
+          cat > ESET-KeyGen/generate_keys.py << 'EOF'
+import random
 import subprocess
 import os
 from itertools import product
@@ -36,22 +37,23 @@ mail_list = [
 ]
 key_types = ["--key", "--small-business-key"]
 
-combos = list(product(os_list, mail_list, key_types))
-random.shuffle(combos)
+combinations = list(product(os_list, mail_list, key_types))
+random.shuffle(combinations)
 
 success = False
 key_data = {}
 
-for os_name, mail, key_type in combos:
+for os_name, mail, key_type in combinations:
     print(f"🔁 Trying: OS={os_name}, Mail={mail}, Type={key_type}")
     try:
-        command = f"""
+        command = f'''
         source venv/bin/activate && \
         python3 main.py {key_type} --email-api {mail} --auto-detect-browser --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat 1
-        """
+        '''
         result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=180)
         print(result.stdout)
         print(result.stderr)
+
         if result.returncode != 0:
             continue
 
@@ -74,8 +76,9 @@ for os_name, mail, key_type in combos:
                     break
 
         if success:
-            print("✅ Key successfully retrieved. Breaking loop.")
+            print("✅ Key successfully retrieved. Stopping attempts.")
             break
+
     except Exception as e:
         print(f"❌ Exception: {e}")
         continue
@@ -84,15 +87,15 @@ if not success:
     print("❌ All combinations failed.")
     exit(1)
 
-print("📝 Writing to eset_keys.md")
+print("📝 Writing keys to eset_keys.md")
 with open("../eset_keys.md", "w") as f:
-    f.write("# ✅ ESET License Key\\n\\n")
-    f.write("| key | username | password | expires date | key type |\\n")
-    f.write("|-----|----------|----------|---------------|-----------|\\n")
-    f.write(f"| `{key_data['key']}` | `{key_data['username']}` | `{key_data['password']}` | {key_data['expires']} | {key_data['key_type']} |\\n")
-' > ESET-KeyGen/generate_keys.py
+    f.write("# ✅ ESET License Key\n\n")
+    f.write("| key | username | password | expires date | key type |\n")
+    f.write("|-----|----------|----------|---------------|-----------|\n")
+    f.write(f"| `{key_data['key']}` | `{key_data['username']}` | `{key_data['password']}` | {key_data['expires']} | {key_data['key_type']} |\n")
+EOF
 
-      - name: Run key generator script
+      - name: Run generate_keys.py script
         run: |
           source ESET-KeyGen/venv/bin/activate
           python3 ESET-KeyGen/generate_keys.py
@@ -100,7 +103,7 @@ with open("../eset_keys.md", "w") as f:
       - name: Show generated keys file
         run: cat eset_keys.md
 
-      - name: Commit and push key
+      - name: Commit and push keys file
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
