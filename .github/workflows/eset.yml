@@ -8,6 +8,11 @@ on:
 jobs:
   generate_key_attempts:
     runs-on: ${{ matrix.os }}
+    # Cấp quyền 'actions: write' cho job này để có thể hủy workflow
+    permissions:
+      actions: write
+      contents: write # Cần để checkout và có thể ghi tệp tạm thời
+
     strategy:
       fail-fast: false # Cho phép tất cả các kết hợp chạy, ngay cả khi một số thất bại
       matrix:
@@ -103,8 +108,21 @@ jobs:
           fi
         working-directory: ${{ github.workspace }}/ESET-KeyGen # Thực thi trong repo đã clone
 
+      - name: Cancel other jobs if key found
+        if: steps.save_key_temp.outputs.key_found == 'true'
+        shell: bash
+        run: |
+          echo "Key found! Attempting to cancel other running jobs in this workflow run."
+          # GitHub CLI (gh) thường được cài đặt sẵn trên các runner của GitHub Actions.
+          # Lệnh này sẽ hủy toàn bộ workflow run hiện tại, bao gồm các job matrix khác.
+          gh workflow run cancel ${{ github.run_id }} --repo ${{ github.repository }}
+          # Đợi một chút để lệnh hủy có hiệu lực
+          sleep 5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Sử dụng GITHUB_TOKEN để xác thực với GitHub CLI
+
   finalize_output:
-    needs: generate_key_attempts # Đảm bảo tất cả các lần thử tạo khóa đã hoàn tất
+    needs: generate_key_attempts # Đảm bảo tất cả các lần thử tạo khóa đã hoàn tất (hoặc đã bị hủy)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
