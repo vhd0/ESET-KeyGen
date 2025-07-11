@@ -1,162 +1,235 @@
-name: Generator
+# Tên của workflow
+name: Sequential Key Generator
 
+# Kích hoạt workflow thủ công qua giao diện GitHub Actions
 on:
   workflow_dispatch:
     inputs:
       branch:
-        description: "Repository branch to commit the key to (e.g., main)"
+        description: "Nhánh để commit file key vào (ví dụ: main)"
         required: true
         default: 'main'
 
 jobs:
+  # Job này chạy tuần tự các cấu hình trong ma trận để tìm key
   generate:
+    # Chạy trên các hệ điều hành được định nghĩa trong matrix
     runs-on: ${{ matrix.os }}
-    # Tiếp tục chạy các job khác trong matrix ngay cả khi một job bị lỗi
+    # Cho phép các job khác trong matrix tiếp tục chạy ngay cả khi một job bị lỗi
     continue-on-error: true
     strategy:
-      # Chạy tất cả các job trong matrix, không hủy các job khác nếu một job lỗi
+      # Đảm bảo tất cả các job trong matrix đều được chạy, không hủy sớm
       fail-fast: false
+      # THAY ĐỔI QUAN TRỌNG: Đặt giới hạn chạy song song là 1 để buộc chạy tuần tự
+      max-parallel: 1
       matrix:
+        # Danh sách các hệ điều hành để thử
         os: [ubuntu-latest, macos-latest, windows-latest]
+        # Danh sách các nhà cung cấp email để thử
         mail_api: [1secmail, guerrillamail, developermail, mailticking, fakemail, inboxes, incognitomail, emailfake]
+        # Danh sách các loại key để thử
         key_type: [--key, --small-business-key]
+    
+    # Cấp quyền để workflow có thể push/delete tag
+    permissions:
+      contents: write
 
     steps:
+      # 1. Tải mã nguồn về runner, fetch-depth: 0 để lấy tất cả history và tags
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      # 2. Kiểm tra xem có job nào đã thành công chưa bằng cách tìm tag 'key-gen-success'
+      - name: Check for success signal
+        id: check_signal
+        run: |
+          # Đồng bộ tags từ remote
+          git fetch origin --tags
+          # Kiểm tra xem tag 'key-gen-success' có tồn tại không
+          if git rev-parse -q --verify "refs/tags/key-gen-success"; then
+            echo "Một job khác đã thành công. Bỏ qua job này."
+            echo "continue=false" >> $GITHUB_OUTPUT
+          else
+            echo "Chưa có job nào thành công. Tiếp tục chạy."
+            echo "continue=true" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      # 3. Clone repository ESET-KeyGen nếu chưa có job nào thành công
       - name: Clone ESET-KeyGen Repository
+        if: steps.check_signal.outputs.continue == 'true'
         run: git clone https://github.com/rzc0d3r/ESET-KeyGen.git
 
+      # 4. Cài đặt môi trường Python cho từng hệ điều hành
       - name: Setup Python Environment (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && steps.check_signal.outputs.continue == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y python3-pip python3-venv
           python3 -m venv ESET-KeyGen/venv
           source ESET-KeyGen/venv/bin/activate
+          pip install --upgrade pip
           pip install -r ESET-KeyGen/requirements.txt
         
       - name: Setup Python Environment (macOS)
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && steps.check_signal.outputs.continue == 'true'
         run: |
           brew install python
           python3 -m venv ESET-KeyGen/venv
           source ESET-KeyGen/venv/bin/activate
+          pip install --upgrade pip
           pip install -r ESET-KeyGen/requirements.txt
 
       - name: Setup Python Environment (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && steps.check_signal.outputs.continue == 'true'
+        shell: pwsh
         run: |
+          python -m pip install --upgrade pip
           pip install -r ESET-KeyGen/requirements.txt
 
+      # 5. Chạy script để tạo key
       - name: Attempt to Generate Key
         id: generate_key
+        if: steps.check_signal.outputs.continue == 'true'
+        working-directory: ./ESET-KeyGen
         run: |
-          cd ESET-KeyGen
-          
-          # Activate venv for Linux/macOS
+          # Kích hoạt môi trường ảo cho Linux/macOS
           if [ -f "venv/bin/activate" ]; then
             source venv/bin/activate
           fi
           
-          # Run the generator and save output
+          # Chạy script với các tham số từ matrix
           python main.py --auto-detect-browser ${{ matrix.key_type }} --email-api ${{ matrix.mail_api }} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat 1
           
-          # Check if key file was created and is not empty
+          # Kiểm tra xem file key đã được tạo và có nội dung hay không
           KEY_FILE=$(ls ./*KEYS.txt 2>/dev/null | head -n 1)
           if [ -n "$KEY_FILE" ] && [ -s "$KEY_FILE" ]; then
-            echo "SUCCESS: Key generated successfully."
+            echo "THÀNH CÔNG: Đã tạo key với cấu hình os=${{ matrix.os }}, mail=${{ matrix.mail_api }}, type=${{ matrix.key_type }}"
             echo "key_generated=true" >> $GITHUB_OUTPUT
-            # Prepare result for upload
-            KEY_CONTENT=$(cat "$KEY_FILE")
-            echo "key_content<<EOF" >> $GITHUB_OUTPUT
-            echo "$KEY_CONTENT" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
           else
-            echo "FAILURE: Could not generate key with this combination."
+            echo "THẤT BẠI: Không thể tạo key với cấu hình này."
             echo "key_generated=false" >> $GITHUB_OUTPUT
           fi
         shell: bash
 
-      - name: Upload successful key
+      # 6. Nếu thành công, tạo file thông tin, gửi tín hiệu dừng và tải lên artifact
+      - name: Signal Success and Prepare Artifact
+        if: steps.generate_key.outputs.key_generated == 'true'
+        working-directory: ./ESET-KeyGen
+        run: |
+          # Tạo file chứa thông tin cấu hình đã thành công
+          echo "${{ matrix.key_type }}" > success_info.txt
+
+          # Gửi tín hiệu dừng bằng cách tạo và push tag
+          echo "Tạo key thành công. Gửi tín hiệu dừng cho các job sau."
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git tag key-gen-success "Key generation successful by workflow"
+          git push origin key-gen-success
+        shell: bash
+
+      - name: Upload successful key as artifact
         if: steps.generate_key.outputs.key_generated == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: key-data-${{ matrix.os }}-${{ matrix.mail_api }}-${{ matrix.key_type }}
+          name: success-artifact # Chỉ có một artifact thành công duy nhất
           path: |
             ESET-KeyGen/*KEYS.txt
-            
+            ESET-KeyGen/success_info.txt
+          retention-days: 1
+
+  # Job này chạy sau khi tất cả các job 'generate' hoàn tất (hoặc bị bỏ qua)
   summarize:
     runs-on: ubuntu-latest
+    # Phụ thuộc vào job 'generate'
     needs: generate
-    # Luôn chạy job này để xử lý kết quả, dù job 'generate' thành công hay thất bại
+    # Luôn chạy job này, bất kể các job 'generate' thành công, thất bại hay bị hủy
     if: always()
+    permissions:
+      contents: write # Cần quyền để commit file và xóa tag
 
     steps:
+      # 1. Tải mã nguồn về để có thể commit file
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.branch }}
+          fetch-depth: 0
 
-      - name: Download all artifacts
+      # 2. Tải artifact thành công (nếu có)
+      - name: Download success artifact
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          name: success-artifact
+          path: artifacts/
+        continue-on-error: true # Tiếp tục ngay cả khi không tìm thấy artifact
 
+      # 3. Xử lý kết quả, tạo file Markdown
       - name: Process Results and Generate Markdown
         id: process
         run: |
-          # Tìm file KEYS.txt đầu tiên trong tất cả các artifact đã tải xuống
-          KEY_FILE=$(find artifacts -name "*KEYS.txt" -type f | head -n 1)
+          # Tìm file key và file thông tin trong artifact đã tải
+          KEY_FILE=$(find artifacts -name "*KEYS.txt" -type f -print -quit)
+          INFO_FILE=$(find artifacts -name "success_info.txt" -type f -print -quit)
 
           if [ -z "$KEY_FILE" ]; then
-            echo "::error::Failed to generate any key after trying all combinations."
             echo "status=failure" >> $GITHUB_OUTPUT
-            exit 1
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "SUCCESS: Đã tìm thấy một key được tạo thành công."
+
+            # Đọc thông tin từ file
+            KEY_TYPE_RAW=$(cat "$INFO_FILE")
+            CONTENT=$(cat "$KEY_FILE")
+            KEY=$(echo "$CONTENT" | sed -n 's/.*Key: \([^|]*\).*/\1/p' | xargs)
+            PASS=$(echo "$CONTENT" | sed -n 's/.*Password: \([^|]*\).*/\1/p' | xargs)
+            EXPIRES=$(echo "$CONTENT" | sed -n 's/.*Expires: \([^|]*\).*/\1/p' | xargs)
+            USER="N/A" # Script không cung cấp username
+
+            # Tạo file markdown
+            MD_FILE="GENERATED_KEY.md"
+            echo "### ESET Key Generated Successfully" > $MD_FILE
+            echo "" >> $MD_FILE
+            echo "| Key Type | Key | Username | Password | Expires Date |" >> $MD_FILE
+            echo "|:---|:---|:---|:---|:---|" >> $MD_FILE
+            echo "| \`$KEY_TYPE_RAW\` | \`$KEY\` | \`$USER\` | \`$PASS\` | \`$EXPIRES\` |" >> $MD_FILE
+            echo "" >> $MD_FILE
+            echo "_Generated by GitHub Actions on $(date)_" >> $MD_FILE
+
+            echo "File markdown '$MD_FILE' đã được tạo:"
+            cat $MD_FILE
           fi
 
-          echo "SUCCESS: Found a generated key."
-          echo "status=success" >> $GITHUB_OUTPUT
-
-          # Trích xuất thông tin từ tên thư mục artifact
-          # Ví dụ tên thư mục: key-data-ubuntu-latest-1secmail---key
-          ARTIFACT_DIR=$(dirname "$KEY_FILE")
-          DIR_NAME=$(basename "$ARTIFACT_DIR")
-          KEY_TYPE=$(echo "$DIR_NAME" | awk -F'-' '{print $NF}')
-
-          # Đọc nội dung key từ file (giả sử định dạng là: Key: ... | Password: ... | Expires: ...)
-          CONTENT=$(cat "$KEY_FILE")
-          KEY=$(echo "$CONTENT" | sed -n 's/.*Key: \([^|]*\).*/\1/p' | xargs)
-          PASS=$(echo "$CONTENT" | sed -n 's/.*Password: \([^|]*\).*/\1/p' | xargs)
-          EXPIRES=$(echo "$CONTENT" | sed -n 's/.*Expires: \([^|]*\).*/\1/p' | xargs)
-          USER="N/A" # Script không cung cấp username, nên ta để mặc định
-
-          # Tạo file markdown
-          MD_FILE="GENERATED_KEY.md"
-          echo "| Key Type | Key | Username | Password | Expires Date |" > $MD_FILE
-          echo "|---|---|---|---|---|" >> $MD_FILE
-          echo "| \`${KEY_TYPE}\` | \`${KEY}\` | ${USER} | \`${PASS}\` | ${EXPIRES} |" >> $MD_FILE
-
-          echo "Markdown file '$MD_FILE' created:"
-          cat $MD_FILE
-
+      # 4. Commit và Push file Markdown nếu thành công
       - name: Commit and Push Markdown File
         if: steps.process.outputs.status == 'success'
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add GENERATED_KEY.md
-          # Chỉ commit nếu có thay đổi
           if git diff-index --quiet HEAD; then
-            echo "No changes to commit."
+            echo "Không có thay đổi để commit."
           else
             git commit -m "feat: Add generated ESET key"
             git push origin ${{ github.event.inputs.branch }}
           fi
-          
-      - name: Report Failure
+      
+      # 5. Dọn dẹp tín hiệu thành công để chuẩn bị cho lần chạy tiếp theo
+      - name: Clean up success signal
+        if: always() # Luôn chạy bước dọn dẹp này
+        run: |
+          if git rev-parse -q --verify "refs/tags/key-gen-success"; then
+            echo "Dọn dẹp tín hiệu thành công..."
+            git push --delete origin key-gen-success
+          else
+            echo "Không tìm thấy tín hiệu thành công để dọn dẹp."
+          fi
+
+      # 6. Báo lỗi cuối cùng nếu không có tổ hợp nào thành công
+      - name: Report Final Failure
         if: steps.process.outputs.status == 'failure'
         run: |
-          echo "Workflow failed because no key could be generated."
+          echo "::error::Workflow đã thất bại vì không có tổ hợp nào có thể tạo ra key."
           exit 1
