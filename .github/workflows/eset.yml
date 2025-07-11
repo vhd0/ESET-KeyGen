@@ -95,6 +95,7 @@ jobs:
             if [ -f "$ACCOUNT_FILE" ] && grep -q "Username:" "$ACCOUNT_FILE"; then
               ACCOUNT_LINE=$(grep "Username:" "$ACCOUNT_FILE" | head -n 1)
               USERNAME=$(echo "$ACCOUNT_LINE" | sed -E 's/.*Username: ([^|]+).*/\1/' | xargs)
+              # Sửa lỗi cú pháp ở đây: Thêm "PASSWORD=$(echo"
               PASSWORD=$(echo "$ACCOUNT_LINE" | sed -E 's/.*Password: (.*)/\1/' | xargs)
             fi
 
