@@ -1,27 +1,19 @@
-name: Automated ESET Key Generator
+name: Automated ESET Key Generator (Simplified)
 
 on:
-  # Workflow này sẽ tự động chạy khi có push lên nhánh 'main'
-  # Bạn có thể thay đổi thành 'schedule' để chạy định kỳ, ví dụ:
-  # schedule:
-  #   - cron: '0 0 * * *' # Chạy hàng ngày vào lúc 00:00 UTC
-
   push:
     branches:
       - main
 
 jobs:
-  # Job chính để thử tạo khóa với các kết hợp ngẫu nhiên
-  generate_and_store_key:
-    # Sử dụng matrix để thử tất cả các kết hợp của OS, Mail API và Key Type
+  generate_key_attempts:
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false # Đảm bảo tất cả các kết hợp được thử, ngay cả khi một số thất bại
+      fail-fast: false # Cho phép tất cả các kết hợp chạy, ngay cả khi một số thất bại
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         mail: [1secmail, guerrillamail, developermail, mailticking, fakemail, inboxes, incognitomail, emailfake]
         key_type: [--key, --small-business-key]
-        # Số lượng khóa và tài khoản sẽ được cố định hoặc lấy từ biến môi trường nếu cần
         key_count: [1] # Luôn cố gắng tạo 1 khóa cho mỗi lần thử
         account_count: [0] # Không tạo tài khoản trong các lần thử này
 
@@ -34,7 +26,7 @@ jobs:
         working-directory: ${{ github.workspace }} # Đảm bảo clone vào thư mục gốc của workspace
 
       - name: Setup Python environment
-        shell: bash # Sử dụng bash cho consistent shell commands across OSes
+        shell: bash # Sử dụng bash cho các lệnh shell nhất quán trên các hệ điều hành
         run: |
           # Cài đặt các dependency Python tùy thuộc vào hệ điều hành của runner
           if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
@@ -47,41 +39,41 @@ jobs:
           python3 -m venv venv
           # Kích hoạt venv
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            source venv/Scripts/activate # For Git Bash on Windows runners
+            source venv/Scripts/activate # Dành cho Git Bash trên Windows runners
           else
             source venv/bin/activate
           fi
           
-          python3 -m pip install --upgrade pip # Upgrade pip as good practice
+          python3 -m pip install --upgrade pip # Nâng cấp pip để thực hành tốt
           pip install -r requirements.txt
-        working-directory: ${{ github.workspace }}/ESET-KeyGen # Execute directly in the cloned repo
+        working-directory: ${{ github.workspace }}/ESET-KeyGen # Thực thi trực tiếp trong repo đã clone
 
       - name: Attempt key generation (${{ matrix.os }} / ${{ matrix.mail }} / ${{ matrix.key_type }})
         id: generate_key_attempt
-        shell: bash # Sử dụng bash cho consistent shell commands across OSes
+        shell: bash # Sử dụng bash cho các lệnh shell nhất quán trên các hệ điều hành
         run: |
           # Kích hoạt venv trước khi chạy script
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            source venv/Scripts/activate # For Git Bash on Windows runners
+            source venv/Scripts/activate # Dành cho Git Bash trên Windows runners
           else
             source venv/bin/activate
           fi
           python3 main.py --auto-detect-browser ${{ matrix.key_type }} --email-api ${{ matrix.mail }} --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat ${{ matrix.key_count }}
-        working-directory: ${{ github.workspace }}/ESET-KeyGen # Execute directly in the cloned repo
+        working-directory: ${{ github.workspace }}/ESET-KeyGen # Thực thi trực tiếp trong repo đã clone
         continue-on-error: true # Cho phép bước này thất bại mà không dừng job con của matrix
 
-      - name: Check for generated key and prepare artifact
-        id: check_and_prepare_artifact
-        shell: bash # Sử dụng bash cho xử lý chuỗi đa nền tảng
+      - name: Check for generated key and save to temporary file
+        id: save_key_temp
+        shell: bash # Sử dụng bash để xử lý chuỗi đa nền tảng
         run: |
-          # REPO_DIR is now the current working directory
+          # REPO_DIR hiện là thư mục làm việc hiện tại
           KEY_FILE=$(find . -name "*KEYS.txt" -print -quit)
           ACCOUNT_FILE=$(find . -name "*ACCOUNTS.txt" -print -quit) # Có thể không tồn tại nếu không tạo account
           KEY_DETAILS=""
           KEY_FOUND="false"
 
           if [ -f "$KEY_FILE" ] && grep -q "Key:" "$KEY_FILE"; then
-            echo "Key found in this combination!"
+            echo "Key found in this combination! Saving to temporary file."
             KEY_FOUND="true"
 
             # Trích xuất Key và Expires Date
@@ -95,33 +87,24 @@ jobs:
             if [ -f "$ACCOUNT_FILE" ] && grep -q "Username:" "$ACCOUNT_FILE"; then
               ACCOUNT_LINE=$(grep "Username:" "$ACCOUNT_FILE" | head -n 1)
               USERNAME=$(echo "$ACCOUNT_LINE" | sed -E 's/.*Username: ([^|]+).*/\1/' | xargs)
-              # Sửa lỗi cú pháp ở đây: Thêm "PASSWORD=$(echo"
               PASSWORD=$(echo "$ACCOUNT_LINE" | sed -E 's/.*Password: (.*)/\1/' | xargs)
             fi
 
             # Định dạng cho hàng bảng markdown
             # Sử dụng matrix.key_type để đảm bảo đúng loại khóa được ghi
             KEY_DETAILS="| ${{ matrix.key_type }} | $KEY | $USERNAME | $PASSWORD | $EXPIRES_DATE |"
-            echo "$KEY_DETAILS" > generated_key_details.txt
+            
+            # Ghi chi tiết khóa vào một tệp tạm thời duy nhất trong thư mục gốc của workspace
+            echo "$KEY_DETAILS" > "${{ github.workspace }}/found_key_${{ matrix.os }}_${{ matrix.mail }}_${{ matrix.key_type }}.txt"
             echo "key_found=true" >> "$GITHUB_OUTPUT"
           else
             echo "No key found for this combination."
             echo "key_found=false" >> "$GITHUB_OUTPUT"
           fi
-        working-directory: ${{ github.workspace }}/ESET-KeyGen # Execute directly in the cloned repo
+        working-directory: ${{ github.workspace }}/ESET-KeyGen # Thực thi trong repo đã clone
 
-      - name: Upload key artifact if found
-        if: steps.check_and_prepare_artifact.outputs.key_found == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: successful-key-${{ github.job }}-${{ matrix.os }}-${{ matrix.mail }}-${{ matrix.key_type }}
-          path: generated_key_details.txt
-          retention-days: 1 # Giữ artifact trong 1 ngày
-        id: upload_key_artifact
-
-  # Job cuối cùng để thu thập khóa và ghi vào file Markdown
-  finalize_key_output:
-    needs: generate_and_store_key # Chờ job tạo khóa hoàn thành
+  finalize_output:
+    needs: generate_key_attempts # Đảm bảo tất cả các lần thử tạo khóa đã hoàn tất
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -129,46 +112,53 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }} # Cần thiết để push thay đổi
 
-      - name: Download all key artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts # Tải tất cả các artifact vào thư mục 'artifacts'
-
-      - name: Process generated keys and write to Markdown
+      - name: Collect and write key to Markdown
+        id: write_final_markdown
+        shell: bash
         run: |
           MARKDOWN_FILE="generated_keys.md"
-          echo "# Generated ESET Keys" > "$MARKDOWN_FILE"
-          echo "" >> "$MARKDOWN_FILE"
-          echo "| Key Type | Key | Username | Password | Expires Date |" >> "$MARKDOWN_FILE"
-          echo "|----------|-----|----------|----------|--------------|" >> "$MARKDOWN_FILE"
+          FOUND_KEY_FILE=""
+          KEY_DETAILS_LINE=""
 
-          KEY_FOUND_OVERALL="false"
-          SUCCESSFUL_KEY_DETAIL=""
-
-          # Lặp qua các artifact đã tải xuống
-          for artifact_dir in artifacts/successful-key-*; do
-            if [ -d "$artifact_dir" ]; then
-              KEY_DETAILS_FILE="$artifact_dir/generated_key_details.txt"
-              if [ -f "$KEY_DETAILS_FILE" ]; then
-                echo "Key found from: $artifact_dir"
-                SUCCESSFUL_KEY_DETAIL=$(cat "$KEY_DETAILS_FILE")
-                KEY_FOUND_OVERALL="true"
-                break # Dừng lại sau khi tìm thấy khóa thành công đầu tiên
-              fi
+          # Tìm tệp khóa thành công đầu tiên
+          # Lặp qua các tệp tạm thời có thể được tạo bởi các job matrix
+          for key_file in ${{ github.workspace }}/found_key_*.txt; do
+            if [ -f "$key_file" ]; then
+              FOUND_KEY_FILE="$key_file"
+              KEY_DETAILS_LINE=$(cat "$key_file")
+              echo "Found key in $key_file"
+              break # Lấy cái đầu tiên tìm thấy
             fi
           done
 
-          if [ "$KEY_FOUND_OVERALL" == "true" ]; then
-            echo "$SUCCESSFUL_KEY_DETAIL" >> "$MARKDOWN_FILE"
-            echo "Key successfully generated and written to $MARKDOWN_FILE"
-            # Commit file markdown
+          if [ -n "$FOUND_KEY_FILE" ]; then
+            # Tạo tệp markdown với tiêu đề nếu nó không tồn tại hoặc trống
+            if [ ! -f "$MARKDOWN_FILE" ] || [ ! -s "$MARKDOWN_FILE" ]; then
+              echo "# Generated ESET Keys" > "$MARKDOWN_FILE"
+              echo "" >> "$MARKDOWN_FILE"
+              echo "| Key Type | Key | Username | Password | Expires Date |" >> "$MARKDOWN_FILE"
+              echo "|----------|-----|----------|----------|--------------|" >> "$MARKDOWN_FILE"
+            fi
+
+            # Thêm chi tiết khóa
+            echo "$KEY_DETAILS_LINE" >> "$MARKDOWN_FILE"
+            echo "Key successfully added to $MARKDOWN_FILE"
+
+            # Commit và push tệp markdown đã cập nhật
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add "$MARKDOWN_FILE"
-            git commit -m "Add generated ESET key to $MARKDOWN_FILE" || echo "No changes to commit"
+            git commit -m "Add generated ESET key" || echo "No new key to commit"
             git push
+            echo "key_written=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Error: No key could be generated after trying all combinations."
-            exit 1 # Kết thúc workflow với lỗi
+            echo "No key found across all attempts."
+            echo "key_written=false" >> "$GITHUB_OUTPUT"
           fi
-        shell: bash
+        working-directory: ${{ github.workspace }} # Thực thi từ thư mục gốc của repository
+
+      - name: Fail workflow if no key was written
+        if: steps.write_final_markdown.outputs.key_written == 'false'
+        run: |
+          echo "Error: No key could be generated after trying all combinations."
+          exit 1
