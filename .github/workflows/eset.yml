@@ -1,5 +1,4 @@
 name: Automated Account and Key Generator
-
 on:
   # Lên lịch chạy hàng ngày vào lúc 00:00 UTC
   schedule:
@@ -88,13 +87,11 @@ jobs:
             key_type_options=("--key" "--small-business-key")
             os_options=("ubuntu-latest" "macos-latest" "windows-latest")
             branch_options=("main" "test")
-
             # Chọn ngẫu nhiên các giá trị
             random_mail=${mail_options[$RANDOM % ${#mail_options[@]}]}
             random_key_type=${key_type_options[$RANDOM % ${#key_type_options[@]}]}
             random_os=${os_options[$RANDOM % ${#os_options[@]}]}
             random_branch=${branch_options[$RANDOM % ${#branch_options[@]}]}
-
             echo "account=0" >> $GITHUB_OUTPUT
             echo "key=1" >> $GITHUB_OUTPUT
             echo "mail=$random_mail" >> $GITHUB_OUTPUT
@@ -109,14 +106,11 @@ jobs:
     needs: prepare-run
     # Sử dụng hệ điều hành được chọn từ job trước
     runs-on: ${{ needs.prepare-run.outputs.os }}
-
     steps:
       - name: Kiểm tra kho lưu trữ
         uses: actions/checkout@v4
-
       - name: Sao chép kho lưu trữ ESET-KeyGen
         run: git clone -b "${{ needs.prepare-run.outputs.branch }}" https://github.com/rzc0d3r/ESET-KeyGen.git
-
       - name: Thiết lập & Chạy Script (Linux/macOS)
         if: runner.os != 'Windows'
         shell: bash
@@ -130,25 +124,21 @@ jobs:
             sudo apt update
             sudo apt install -y python3-pip python3-venv
           fi
-
           # Tạo và kích hoạt môi trường ảo Python
           python3 -m venv venv
           source venv/bin/activate
           # Cài đặt các phụ thuộc Python
           pip install -r requirements.txt
-
           # Gán các biến từ đầu ra của job 'prepare-run'
           ACCOUNT="${{ needs.prepare-run.outputs.account }}"
           KEY="${{ needs.prepare-run.outputs.key }}"
           MAIL="${{ needs.prepare-run.outputs.mail }}"
           KEY_TYPE="${{ needs.prepare-run.outputs.key_type }}"
-
           echo "Đang chạy với:"
           echo "  Tài khoản: $ACCOUNT"
           echo "  Khóa: $KEY"
           echo "  Email: $MAIL"
           echo "  Loại khóa: $KEY_TYPE"
-
           # Khởi tạo file kết quả tổng hợp
           echo "# Kết quả tạo tài khoản và khóa" > generated_results.md
           echo "## Thông tin chạy" >> generated_results.md
@@ -158,14 +148,11 @@ jobs:
           echo "- **Nhà cung cấp Email**: $MAIL" >> generated_results.md
           echo "- **Chế độ hoạt động**: $KEY_TYPE" >> generated_results.md
           echo "" >> generated_results.md
-
-
           # Chạy tạo tài khoản nếu ACCOUNT không phải là 0
           if [[ "$ACCOUNT" != "0" ]]; then
             python3 main.py --auto-detect-browser --account --email-api "$MAIL" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat "$ACCOUNT"
             echo "### Tài khoản đã tạo" >> $GITHUB_STEP_SUMMARY
             cat ./*ACCOUNTS.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "Không có" >> $GITHUB_STEP_SUMMARY
-
             # Lưu tài khoản vào file kết quả tổng hợp
             echo "## Tài khoản đã tạo (${ACCOUNT} tài khoản)" >> generated_results.md
             echo "\`\`\`" >> generated_results.md
@@ -173,20 +160,17 @@ jobs:
             echo "\`\`\`" >> generated_results.md
             echo "" >> generated_results.md
           fi
-
           # Chạy tạo khóa nếu KEY không phải là 0
           if [[ "$KEY" != "0" ]]; then
             python3 main.py --auto-detect-browser "$KEY_TYPE" --email-api "$MAIL" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat "$KEY"
             echo -e "\n### Khóa đã tạo" >> $GITHUB_STEP_SUMMARY
             cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "Không có" >> $GITHUB_STEP_SUMMARY
-
             # Lưu khóa vào file kết quả tổng hợp
             echo "## Khóa đã tạo (${KEY} khóa)" >> generated_results.md
             echo "\`\`\`" >> generated_results.md
             cat ./*KEYS.txt >> generated_results.md 2>/dev/null || echo "Không có khóa nào được tạo." >> generated_results.md
             echo "\`\`\`" >> generated_results.md
           fi
-
       - name: Thiết lập & Chạy Script (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -196,19 +180,16 @@ jobs:
           python -m venv venv
           .\venv\Scripts\pip install -r requirements.txt
           .\venv\Scripts\Activate.ps1
-
           # Gán các biến từ đầu ra của job 'prepare-run'
           $ACCOUNT = "${{ needs.prepare-run.outputs.account }}"
           $KEY = "${{ needs.prepare-run.outputs.key }}"
           $MAIL = "${{ needs.prepare-run.outputs.mail }}"
           $KEY_TYPE = "${{ needs.prepare-run.outputs.key_type }}"
-
           Write-Host "Đang chạy với:"
           Write-Host "  Tài khoản: $ACCOUNT"
           Write-Host "  Khóa: $KEY"
           Write-Host "  Email: $MAIL"
           Write-Host "  Loại khóa: $KEY_TYPE"
-
           # Khởi tạo file kết quả tổng hợp
           Set-Content -Path generated_results.md -Value "# Kết quả tạo tài khoản và khóa"
           Add-Content -Path generated_results.md -Value "## Thông tin chạy"
@@ -218,13 +199,11 @@ jobs:
           Add-Content -Path generated_results.md -Value "- **Nhà cung cấp Email**: $MAIL" # Đã sửa lỗi ở đây
           Add-Content -Path generated_results.md -Value "- **Chế độ hoạt động**: $KEY_TYPE"
           Add-Content -Path generated_results.md -Value ""
-
           # Chạy tạo tài khoản nếu $ACCOUNT không phải là 0
           if ($ACCOUNT -ne 0) {
             python main.py --auto-detect-browser --account --email-api "$MAIL" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $ACCOUNT
             "### Tài khoản đã tạo" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
             Get-Content -Path ./*ACCOUNTS.txt -ErrorAction SilentlyContinue | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-
             # Lưu tài khoản vào file kết quả tổng hợp
             Add-Content -Path generated_results.md -Value "## Tài khoản đã tạo (${ACCOUNT} tài khoản)"
             Add-Content -Path generated_results.md -Value "```"
@@ -235,13 +214,11 @@ jobs:
             Add-Content -Path generated_results.md -Value "```"
             Add-Content -Path generated_results.md -Value ""
           }
-
           # Chạy tạo khóa nếu $KEY không phải là 0
           if ($KEY -ne 0) {
             python main.py --auto-detect-browser "$KEY_TYPE" --email-api "$MAIL" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $KEY
             "`n### Khóa đã tạo" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
             Get-Content -Path ./*KEYS.txt -ErrorAction SilentlyContinue | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-
             # Lưu khóa vào file kết quả tổng hợp
             Add-Content -Path generated_results.md -Value "## Khóa đã tạo (${KEY} khóa)"
             Add-Content -Path generated_results.md -Value "```"
@@ -251,7 +228,6 @@ jobs:
             }
             Add-Content -Path generated_results.md -Value "```"
           }
-
       - name: Tải lên kết quả đã tạo
         # Luôn tải lên artifact ngay cả khi các bước trước đó thất bại
         if: success() || failure()
