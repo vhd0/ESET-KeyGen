@@ -170,7 +170,7 @@ jobs:
           fi
 
           # Ghi script Python vào một tệp tạm thời
-          python3 -c "import sys; with open('format_and_update_md.py', 'w', encoding='utf-8') as f: f.write(sys.stdin.read())" << 'EOF'
+          cat > format_and_update_md.py << 'EOF'
 import os
 import glob
 import re
