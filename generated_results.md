@@ -1,10 +1,10 @@
 | Email tài khoản | Mật khẩu tài khoản | Tên giấy phép | Khóa giấy phép | Ngày hết hạn |
 |-----------------|--------------------|---------------|---------------|--------------|
 |  |  |  |  |  |
-| genusya@techhubup.com |  |  |  |  |
-|  | QK(:XP{5?YpinR[< |  |  |  |
+| bruceb17@nowfixweb.com |  |  |  |  |
+|  | 2T{iM|z)5gitQ |  |  |  |
 |  |  |  |  |  |
 |  |  | ESET HOME Security Premium |  |  |
-|  |  |  | 2R7B-X9DX-VKUF-WJ76-W4G5 |  |
+|  |  |  | 45EX-X7VE-8PPM-CHDP-9JG4 |  |
 |  |  |  |  | 16.08.2025 |
 |  |  |  |  |  |
