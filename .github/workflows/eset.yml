@@ -169,41 +169,44 @@ jobs:
             cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "Không có" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # Bắt đầu logic định dạng và tạo generated_results.md
-          echo "# Kết quả tạo tài khoản và khóa" > generated_results.md
-          echo "## Thông tin chạy" >> generated_results.md
-          echo "- **Thời gian chạy**: $(date '+%Y-%m-%d %H:%M:%S UTC')" >> generated_results.md
-          echo "- **Hệ điều hành Runner**: ${{ needs.prepare-run.outputs.os }}" >> generated_results.md
-          echo "- **Nhánh kho lưu trữ**: ${{ needs.prepare-run.outputs.branch }}" >> generated_results.md
-          echo "- **Nhà cung cấp Email**: $MAIL" >> generated_results.md
-          echo "- **Chế độ hoạt động**: $KEY_TYPE" >> generated_results.md
-          echo "" >> generated_results.md
+          # Function to extract and format a single license block into a table row
+          format_block_to_row() {
+            local block="$1"
+            local email=$(echo "$block" | grep -oP 'Account Email: \K.*' | tr -d '\r')
+            local password=$(echo "$block" | grep -oP 'Account Password: \K.*' | tr -d '\r')
+            local license_name=$(echo "$block" | grep -oP 'License Name: \K.*' | tr -d '\r')
+            local license_key=$(echo "$block" | grep -oP 'License Key: \K.*' | tr -d '\r')
+            local license_out_date=$(echo "$block" | grep -oP 'License Out Date: \K.*' | tr -d '\r')
 
-          # Xử lý tài khoản
+            echo "| $email | $password | $license_name | $license_key | $license_out_date |" >> generated_results.md
+          }
+
+          # Initialize generated_results.md with table header
+          echo "| Email tài khoản | Mật khẩu tài khoản | Tên giấy phép | Khóa giấy phép | Ngày hết hạn |" > generated_results.md
+          echo "|-----------------|--------------------|---------------|---------------|--------------|" >> generated_results.md
+
+          # Process ACCOUNTS.txt
           if [[ "$ACCOUNT" != "0" ]]; then
-              echo "## Tài khoản đã tạo (${ACCOUNT} tài khoản)" >> generated_results.md
-              echo "\`\`\`" >> generated_results.md
-              # Kiểm tra và thêm nội dung từ tệp ACCOUNTS.txt
               if compgen -G "*ACCOUNTS.txt" > /dev/null; then
-                  cat *ACCOUNTS.txt >> generated_results.md
+                  file_content=$(cat *ACCOUNTS.txt)
+                  echo "$file_content" | awk -v RS="-------------------------------------------------" 'NF { print $0 }' | while IFS= read -r block; do
+                      format_block_to_row "$block"
+                  done
               else
-                  echo "Không có tài khoản nào được tạo." >> generated_results.md
+                  echo "| Không có | Không có | Không có | Không có | Không có |" >> generated_results.md
               fi
-              echo "\`\`\`" >> generated_results.md
-              echo "" >> generated_results.md
           fi
 
-          # Xử lý khóa
+          # Process KEYS.txt
           if [[ "$KEY" != "0" ]]; then
-              echo "## Khóa đã tạo (${KEY} khóa)" >> generated_results.md
-              echo "\`\`\`" >> generated_results.md
-              # Kiểm tra và thêm nội dung từ tệp KEYS.txt
               if compgen -G "*KEYS.txt" > /dev/null; then
-                  cat *KEYS.txt >> generated_results.md
+                  file_content=$(cat *KEYS.txt)
+                  echo "$file_content" | awk -v RS="-------------------------------------------------" 'NF { print $0 }' | while IFS= read -r block; do
+                      format_block_to_row "$block"
+                  done
               else
-                  echo "Không có khóa nào được tạo." >> generated_results.md
+                  echo "| Không có | Không có | Không có | Không có | Không có |" >> generated_results.md
               fi
-              echo "\`\`\`" >> generated_results.md
           fi
           # Kết thúc logic định dạng và tạo generated_results.md
 
