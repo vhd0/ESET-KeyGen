@@ -207,11 +207,18 @@ jobs:
           fi
           # Kết thúc logic định dạng và tạo generated_results.md
 
-      - name: Tải lên kết quả đã tạo
-        # Luôn tải lên artifact ngay cả khi các bước trước đó thất bại
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-results # Tên artifact cuối cùng
-          path: ESET-KeyGen/generated_results.md # Đường dẫn đến tệp đã tạo
-          retention-days: 7 # Giữ artifact trong 7 ngày
+      - name: Cập nhật và đẩy kết quả vào nhánh chính
+        if: success() || failure() # Chạy ngay cả khi các bước trước có lỗi nhẹ
+        run: |
+          cd ESET-KeyGen
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Kiểm tra xem có thay đổi nào trong generated_results.md không
+          git add generated_results.md
+          git diff-index --quiet HEAD || git commit -m "Cập nhật kết quả tạo tài khoản và khóa tự động"
+          
+          # Đẩy lên nhánh đã chọn
+          git push origin ${{ needs.prepare-run.outputs.branch }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Cần token để đẩy lên repo
