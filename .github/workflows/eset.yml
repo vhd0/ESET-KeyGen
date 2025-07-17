@@ -106,6 +106,8 @@ jobs:
     needs: prepare-run
     # Sử dụng hệ điều hành được chọn từ job trước
     runs-on: ${{ needs.prepare-run.outputs.os }}
+    permissions:
+      contents: write # Cấp quyền ghi cho GITHUB_TOKEN để đẩy thay đổi
     steps:
       - name: Kiểm tra kho lưu trữ
         uses: actions/checkout@v4
