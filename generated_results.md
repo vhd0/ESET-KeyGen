@@ -1,10 +1,10 @@
 | Email tài khoản | Mật khẩu tài khoản | Tên giấy phép | Khóa giấy phép | Ngày hết hạn |
 |-----------------|--------------------|---------------|---------------|--------------|
 |  |  |  |  |  |
-| leonidtockaev@phucmmo.com |  |  |  |  |
-|  | 5[k_1\_fZ?ol5N |  |  |  |
+| genusya@techhubup.com |  |  |  |  |
+|  | QK(:XP{5?YpinR[< |  |  |  |
 |  |  |  |  |  |
 |  |  | ESET HOME Security Premium |  |  |
-|  |  |  | 5ACH-XJHU-BDR4-UCCT-95BP |  |
+|  |  |  | 2R7B-X9DX-VKUF-WJ76-W4G5 |  |
 |  |  |  |  | 16.08.2025 |
 |  |  |  |  |  |
