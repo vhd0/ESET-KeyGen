@@ -169,8 +169,8 @@ jobs:
             cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "Không có" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # Bắt đầu logic định dạng và tạo generated_results.md bằng Python
-          python3 -c "
+          # Ghi script Python vào một tệp tạm thời
+          cat << 'EOF' > format_and_update_md.py
 import os
 import glob
 import re
@@ -185,7 +185,8 @@ def parse_and_format_license_data(account_file_patterns, key_file_patterns, outp
             if len(lines) > 2: # Skip header and separator lines
                 for line in lines[2:]:
                     line = line.strip()
-                    if line.startswith('|') and line.endswith('|'):
+                    # Check if the line is a valid table row before adding
+                    if line.startswith('|') and line.endswith('|') and '|' in line[1:-1]: # Ensure it's a table row
                         all_entries.append(line)
 
     # Process new account and key files
@@ -240,9 +241,13 @@ def parse_and_format_license_data(account_file_patterns, key_file_patterns, outp
             for entry_row in all_entries:
                 f.write(entry_row + "\n")
 
-# Call the function from the current directory (ESET-KeyGen)
-parse_and_format_license_data(['./*ACCOUNTS.txt'], ['./*KEYS.txt'], 'generated_results.md', 30)
-"
+# Main execution block
+if __name__ == "__main__":
+    # Assuming script is run from ESET-KeyGen directory
+    parse_and_format_license_data(['./*ACCOUNTS.txt'], ['./*KEYS.txt'], 'generated_results.md', 30)
+EOF
+          # Thực thi script Python
+          python3 format_and_update_md.py
           # Kết thúc logic định dạng và tạo generated_results.md
 
       - name: Cập nhật và đẩy kết quả vào nhánh chính
