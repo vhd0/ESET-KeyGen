@@ -172,15 +172,16 @@ jobs:
           # Function to extract and format a single license block into a table row
           format_block_to_row() {
             local block="$1"
-            # Use grep -oP to extract the value and xargs to trim whitespace and newlines
+            # Use awk to extract the value, then tr to remove newlines, and sed to trim leading/trailing whitespace
             # The '|| echo ""' ensures that if no match is found, an empty string is used
-            local email=$(echo "$block" | grep -oP 'Account Email: \K.*' | xargs || echo "")
-            local password=$(echo "$block" | grep -oP 'Account Password: \K.*' | xargs || echo "")
-            local license_name=$(echo "$block" | grep -oP 'License Name: \K.*' | xargs || echo "")
-            local license_key=$(echo "$block" | grep -oP 'License Key: \K.*' | xargs || echo "")
-            local license_out_date=$(echo "$block" | grep -oP 'License Out Date: \K.*' | xargs || echo "")
+            local email=$(echo "$block" | awk -F': ' '/Account Email:/ {print $2}' | tr -d '\n\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
+            local password=$(echo "$block" | awk -F': ' '/Account Password:/ {print $2}' | tr -d '\n\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
+            local license_name=$(echo "$block" | awk -F': ' '/License Name:/ {print $2}' | tr -d '\n\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
+            local license_key=$(echo "$block" | awk -F': ' '/License Key:/ {print $2}' | tr -d '\n\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
+            local license_out_date=$(echo "$block" | awk -F': ' '/License Out Date:/ {print $2}' | tr -d '\n\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
 
-            echo "| $email | $password | $license_name | $license_key | $license_out_date |" >> generated_results.md
+            # Wrap password and license_key in backticks for inline code formatting
+            echo "| $email | \`$password\` | $license_name | \`$license_key\` | $license_out_date |" >> generated_results.md
           }
 
           # Initialize generated_results.md with table header
