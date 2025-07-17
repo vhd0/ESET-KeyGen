@@ -110,7 +110,8 @@ jobs:
       - name: Kiểm tra kho lưu trữ
         uses: actions/checkout@v4
       - name: Sao chép kho lưu trữ ESET-KeyGen
-        run: git clone -b "${{ needs.prepare-run.outputs.branch }}" https://github.com/rzc0d3r/ESET-KeyGen.git
+        # Sử dụng GITHUB_TOKEN để xác thực khi clone
+        run: git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/rzc0d3r/ESET-KeyGen.git ESET-KeyGen
       
       - name: Thiết lập & Chạy Script (Đa nền tảng)
         shell: bash # Sử dụng Bash cho tất cả các hệ điều hành để nhất quán
