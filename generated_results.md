@@ -16,3 +16,8 @@
 |  | `` |  | `FKUA-XNPK-RBC2-3S2H-WGSM` |  |
 |  | `` |  | `` | 16.08.2025 |
 |  | `` |  | `` |  |
+| rrothn@slushpools.cloud |  |  |  |  |
+|  | `(]7#{ME!fCgAhBYdX$` |  |  |  |
+|  |  | ESET HOME Security Premium |  |  |
+|  |  |  | `8TNC-X64S-MHK2-VG5H-HC94` |  |
+|  |  |  |  | 16.08.2025 |
