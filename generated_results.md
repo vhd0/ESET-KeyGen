@@ -8,3 +8,11 @@
 |  | `` |  | `HK8A-X3J2-DDMJ-4XJU-S7DW` |  |
 |  | `` |  | `` | 16.08.2025 |
 |  | `` |  | `` |  |
+|  | `` |  | `` |  |
+| redruskie@maxseeding.com | `` |  | `` |  |
+|  | `{3Y,0&'K^NXep3g` |  | `` |  |
+|  | `` |  | `` |  |
+|  | `` | ESET HOME Security Premium | `` |  |
+|  | `` |  | `FKUA-XNPK-RBC2-3S2H-WGSM` |  |
+|  | `` |  | `` | 16.08.2025 |
+|  | `` |  | `` |  |
