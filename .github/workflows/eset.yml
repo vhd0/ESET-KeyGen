@@ -181,38 +181,52 @@ jobs:
             local license_out_date=$(echo "$block" | awk -F': ' '/License Out Date:/ {print $2}' | tr -d '\n\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
 
             # Wrap password and license_key in backticks for inline code formatting
-            echo "| $email | \`$password\` | $license_name | \`$license_key\` | $license_out_date |" >> generated_results.md
+            echo "| $email | \`$password\` | $license_name | \`$license_key\` | $license_out_date |"
           }
 
-          # Initialize generated_results.md with table header
-          echo "| Email tài khoản | Mật khẩu tài khoản | Tên giấy phép | Khóa giấy phép | Ngày hết hạn |" > generated_results.md
-          echo "|-----------------|--------------------|---------------|---------------|--------------|" >> generated_results.md
+          # Define the temporary file for new entries
+          NEW_ENTRIES_FILE="new_generated_entries.md"
+          # Clear the new entries file before processing
+          > "$NEW_ENTRIES_FILE"
 
-          # Process ACCOUNTS.txt
+          # Process ACCOUNTS.txt and KEYS.txt, appending to NEW_ENTRIES_FILE
           if [[ "$ACCOUNT" != "0" ]]; then
               if compgen -G "*ACCOUNTS.txt" > /dev/null; then
                   file_content=$(cat *ACCOUNTS.txt)
-                  # Split content by the delimiter and process each block
                   echo "$file_content" | awk -v RS="-------------------------------------------------" 'NF { print $0 }' | while IFS= read -r block; do
-                      format_block_to_row "$block"
+                      format_block_to_row "$block" >> "$NEW_ENTRIES_FILE"
                   done
-              else
-                  echo "| Không có | Không có | Không có | Không có | Không có |" >> generated_results.md
               fi
           fi
 
-          # Process KEYS.txt
           if [[ "$KEY" != "0" ]]; then
               if compgen -G "*KEYS.txt" > /dev/null; then
                   file_content=$(cat *KEYS.txt)
-                  # Split content by the delimiter and process each block
                   echo "$file_content" | awk -v RS="-------------------------------------------------" 'NF { print $0 }' | while IFS= read -r block; do
-                      format_block_to_row "$block"
+                      format_block_to_row "$block" >> "$NEW_ENTRIES_FILE"
                   done
-              else
-                  echo "| Không có | Không có | Không có | Không có | Không có |" >> generated_results.md
               fi
           fi
+
+          # Now, combine existing and new entries, then trim to 30
+          ALL_ENTRIES_FILE="all_generated_entries.md"
+          # If generated_results.md exists, copy its content (excluding header)
+          if [ -f generated_results.md ]; then
+              tail -n +3 generated_results.md > "$ALL_ENTRIES_FILE"
+          else
+              > "$ALL_ENTRIES_FILE" # Create empty if not exists
+          fi
+
+          # Append new entries
+          cat "$NEW_ENTRIES_FILE" >> "$ALL_ENTRIES_FILE"
+
+          # Re-write generated_results.md with header and latest 30 entries
+          echo "| Email tài khoản | Mật khẩu tài khoản | Tên giấy phép | Khóa giấy phép | Ngày hết hạn |" > generated_results.md
+          echo "|-----------------|--------------------|---------------|---------------|--------------|" >> generated_results.md
+          tail -n 30 "$ALL_ENTRIES_FILE" >> generated_results.md
+
+          # Clean up temporary files
+          rm -f "$NEW_ENTRIES_FILE" "$ALL_ENTRIES_FILE"
           # Kết thúc logic định dạng và tạo generated_results.md
 
       - name: Cập nhật và đẩy kết quả vào nhánh chính
