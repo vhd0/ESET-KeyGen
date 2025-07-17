@@ -139,37 +139,18 @@ jobs:
           echo "  Khóa: $KEY"
           echo "  Email: $MAIL"
           echo "  Loại khóa: $KEY_TYPE"
-          # Khởi tạo file kết quả tổng hợp
-          echo "# Kết quả tạo tài khoản và khóa" > generated_results.md
-          echo "## Thông tin chạy" >> generated_results.md
-          echo "- **Thời gian chạy**: $(date '+%Y-%m-%d %H:%M:%S UTC')" >> generated_results.md
-          echo "- **Hệ điều hành Runner**: ${{ needs.prepare-run.outputs.os }}" >> generated_results.md
-          echo "- **Nhánh kho lưu trữ**: ${{ needs.prepare-run.outputs.branch }}" >> generated_results.md
-          echo "- **Nhà cung cấp Email**: $MAIL" >> generated_results.md
-          echo "- **Chế độ hoạt động**: $KEY_TYPE" >> generated_results.md
-          echo "" >> generated_results.md
+          
           # Chạy tạo tài khoản nếu ACCOUNT không phải là 0
           if [[ "$ACCOUNT" != "0" ]]; then
             python3 main.py --auto-detect-browser --account --email-api "$MAIL" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat "$ACCOUNT"
             echo "### Tài khoản đã tạo" >> $GITHUB_STEP_SUMMARY
             cat ./*ACCOUNTS.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "Không có" >> $GITHUB_STEP_SUMMARY
-            # Lưu tài khoản vào file kết quả tổng hợp
-            echo "## Tài khoản đã tạo (${ACCOUNT} tài khoản)" >> generated_results.md
-            echo "\`\`\`" >> generated_results.md
-            cat ./*ACCOUNTS.txt >> generated_results.md 2>/dev/null || echo "Không có tài khoản nào được tạo." >> generated_results.md
-            echo "\`\`\`" >> generated_results.md
-            echo "" >> generated_results.md
           fi
           # Chạy tạo khóa nếu KEY không phải là 0
           if [[ "$KEY" != "0" ]]; then
             python3 main.py --auto-detect-browser "$KEY_TYPE" --email-api "$MAIL" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat "$KEY"
             echo -e "\n### Khóa đã tạo" >> $GITHUB_STEP_SUMMARY
             cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "Không có" >> $GITHUB_STEP_SUMMARY
-            # Lưu khóa vào file kết quả tổng hợp
-            echo "## Khóa đã tạo (${KEY} khóa)" >> generated_results.md
-            echo "\`\`\`" >> generated_results.md
-            cat ./*KEYS.txt >> generated_results.md 2>/dev/null || echo "Không có khóa nào được tạo." >> generated_results.md
-            echo "\`\`\`" >> generated_results.md
           fi
       - name: Thiết lập & Chạy Script (Windows)
         if: runner.os == 'Windows'
@@ -190,49 +171,91 @@ jobs:
           Write-Host "  Khóa: $KEY"
           Write-Host "  Email: $MAIL"
           Write-Host "  Loại khóa: $KEY_TYPE"
-          # Khởi tạo file kết quả tổng hợp
-          Set-Content -Path generated_results.md -Value "# Kết quả tạo tài khoản và khóa"
-          Add-Content -Path generated_results.md -Value "## Thông tin chạy"
-          Add-Content -Path generated_results.md -Value "- **Thời gian chạy**: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')"
-          Add-Content -Path generated_results.md -Value "- **Hệ điều hành Runner**: ${{ needs.prepare-run.outputs.os }}"
-          Add-Content -Path generated_results.md -Value "- **Nhánh kho lưu trữ**: ${{ needs.prepare-run.outputs.branch }}"
-          Add-Content -Path generated_results.md -Value "- **Nhà cung cấp Email**: $MAIL"
-          Add-Content -Path generated_results.md -Value "- **Chế độ hoạt động**: $KEY_TYPE"
-          Add-Content -Path generated_results.md -Value ""
+          
           # Chạy tạo tài khoản nếu $ACCOUNT không phải là 0
           if ($ACCOUNT -ne 0) {
             python main.py --auto-detect-browser --account --email-api "$MAIL" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $ACCOUNT
             "### Tài khoản đã tạo" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
             Get-Content -Path ./*ACCOUNTS.txt -ErrorAction SilentlyContinue | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-            # Lưu tài khoản vào file kết quả tổng hợp
-            Add-Content -Path generated_results.md -Value "## Tài khoản đã tạo (${ACCOUNT} tài khoản)"
-            Add-Content -Path generated_results.md -Value "```"
-            Get-Content -Path ./*ACCOUNTS.txt -ErrorAction SilentlyContinue | Add-Content -Path generated_results.md
-            if (-not (Test-Path -Path ./*ACCOUNTS.txt) -or (Get-Item ./*ACCOUNTS.txt).Length -eq 0) {
-                Add-Content -Path generated_results.md -Value "Không có tài khoản nào được tạo."
-            }
-            Add-Content -Path generated_results.md -Value "```"
-            Add-Content -Path generated_results.md -Value ""
           }
           # Chạy tạo khóa nếu $KEY không phải là 0
           if ($KEY -ne 0) {
             python main.py --auto-detect-browser "$KEY_TYPE" --email-api "$MAIL" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $KEY
             "`n### Khóa đã tạo" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
             Get-Content -Path ./*KEYS.txt -ErrorAction SilentlyContinue | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-            # Lưu khóa vào file kết quả tổng hợp
-            Add-Content -Path generated_results.md -Value "## Khóa đã tạo (${KEY} khóa)"
-            Add-Content -Path generated_results.md -Value "```"
-            Get-Content -Path ./*KEYS.txt -ErrorAction SilentlyContinue | Add-Content -Path generated_results.md
-            if (-not (Test-Path -Path ./*KEYS.txt) -or (Get-Item ./*KEYS.txt).Length -eq 0) {
-                Add-Content -Path generated_results.md -Value "Không có khóa nào được tạo."
-            }
-            Add-Content -Path generated_results.md -Value "```"
           }
-      - name: Tải lên kết quả đã tạo
+      
+      - name: Tải lên các tệp kết quả thô
         # Luôn tải lên artifact ngay cả khi các bước trước đó thất bại
         if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
-          name: generated-results
+          name: raw-generated-files
+          path: ESET-KeyGen/*.{txt,log} # Tải lên tất cả các tệp .txt và .log
+          retention-days: 1 # Giữ artifact trong 1 ngày, chỉ để chuyển tiếp
+
+  format-and-upload-results:
+    needs: generate-account-and-key # Phụ thuộc vào job tạo và tải lên tệp thô
+    runs-on: ubuntu-latest # Có thể chạy trên bất kỳ runner nào, ubuntu là phổ biến
+    steps:
+      - name: Kiểm tra kho lưu trữ
+        uses: actions/checkout@v4
+      - name: Tải xuống các tệp kết quả thô
+        uses: actions/download-artifact@v4
+        with:
+          name: raw-generated-files
+          path: ./downloaded-results # Tải xuống vào một thư mục riêng biệt
+
+      - name: Định dạng và tạo tệp kết quả cuối cùng
+        shell: bash
+        run: |
+          # Di chuyển vào thư mục chứa các tệp đã tải xuống
+          cd ./downloaded-results
+
+          # Khởi tạo file kết quả tổng hợp
+          echo "# Kết quả tạo tài khoản và khóa" > generated_results.md
+          echo "## Thông tin chạy" >> generated_results.md
+          echo "- **Thời gian chạy**: $(date '+%Y-%m-%d %H:%M:%S UTC')" >> generated_results.md
+          echo "- **Hệ điều hành Runner**: ${{ needs.prepare-run.outputs.os }}" >> generated_results.md
+          echo "- **Nhánh kho lưu trữ**: ${{ needs.prepare-run.outputs.branch }}" >> generated_results.md
+          echo "- **Nhà cung cấp Email**: ${{ needs.prepare-run.outputs.mail }}" >> generated_results.md
+          echo "- **Chế độ hoạt động**: ${{ needs.prepare-run.outputs.key_type }}" >> generated_results.md
+          echo "" >> generated_results.md
+
+          ACCOUNT="${{ needs.prepare-run.outputs.account }}"
+          KEY="${{ needs.prepare-run.outputs.key }}"
+
+          # Xử lý tài khoản
+          if [[ "$ACCOUNT" != "0" ]]; then
+              echo "## Tài khoản đã tạo (${ACCOUNT} tài khoản)" >> generated_results.md
+              echo "\`\`\`" >> generated_results.md
+              if compgen -G "*ACCOUNTS.txt" > /dev/null; then # Kiểm tra nếu có tệp ACCOUNTS.txt
+                  cat *ACCOUNTS.txt >> generated_results.md
+              else
+                  echo "Không có tài khoản nào được tạo." >> generated_results.md
+              fi
+              echo "\`\`\`" >> generated_results.md
+              echo "" >> generated_results.md
+          fi
+
+          # Xử lý khóa
+          if [[ "$KEY" != "0" ]]; then
+              echo "## Khóa đã tạo (${KEY} khóa)" >> generated_results.md
+              echo "\`\`\`" >> generated_results.md
+              if compgen -G "*KEYS.txt" > /dev/null; then # Kiểm tra nếu có tệp KEYS.txt
+                  cat *KEYS.txt >> generated_results.md
+              else
+                  echo "Không có khóa nào được tạo." >> generated_results.md
+              fi
+              echo "\`\`\`" >> generated_results.md
+          fi
+          
+          # Di chuyển tệp kết quả ra thư mục gốc của job để tải lên
+          mv generated_results.md ../generated_results.md
+
+      - name: Tải lên kết quả đã tạo
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-generated-results
           path: generated_results.md
           retention-days: 7 # Giữ artifact trong 7 ngày
