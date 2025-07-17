@@ -111,15 +111,12 @@ jobs:
     steps:
       - name: Kiểm tra kho lưu trữ
         uses: actions/checkout@v4
-      - name: Sao chép kho lưu trữ ESET-KeyGen
-        # Sử dụng GITHUB_TOKEN để xác thực khi clone
-        run: git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/rzc0d3r/ESET-KeyGen.git ESET-KeyGen
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }} # Đảm bảo GITHUB_TOKEN được sử dụng để checkout
       
       - name: Thiết lập & Chạy Script (Đa nền tảng)
         shell: bash # Sử dụng Bash cho tất cả các hệ điều hành để nhất quán
         run: |
-          cd ESET-KeyGen
-          
           # Cài đặt Python và các phụ thuộc
           if command -v brew &> /dev/null; then
             # macOS
@@ -213,7 +210,6 @@ jobs:
       - name: Cập nhật và đẩy kết quả vào nhánh chính
         if: success() || failure() # Chạy ngay cả khi các bước trước có lỗi nhẹ
         run: |
-          cd ESET-KeyGen
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
