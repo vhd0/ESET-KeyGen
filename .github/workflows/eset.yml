@@ -169,84 +169,80 @@ jobs:
             cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "Không có" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # Function to extract and format a single license block into a table row
-          format_block_to_row() {
-            local block="$1"
-            # Use awk to extract the value, then tr to remove newlines, and xargs to trim leading/trailing whitespace
-            # The '|| echo ""' ensures that if no match is found, an empty string is used
-            local email=$(echo "$block" | awk -F': ' '/Account Email:/ {print $2}' | tr -d '\n\r' | xargs || echo "")
-            local password=$(echo "$block" | awk -F': ' '/Account Password:/ {print $2}' | tr -d '\n\r' | xargs || echo "")
-            local license_name=$(echo "$block" | awk -F': ' '/License Name:/ {print $2}' | tr -d '\n\r' | xargs || echo "")
-            local license_key=$(echo "$block" | awk -F': ' '/License Key:/ {print $2}' | tr -d '\n\r' | xargs || echo "")
-            local license_out_date=$(echo "$block" | awk -F': ' '/License Out Date:/ {print $2}' | tr -d '\n\r' | xargs || echo "")
+          # Bắt đầu logic định dạng và tạo generated_results.md bằng Python
+          python3 -c "
+import os
+import glob
+import re
 
-            # Escape pipe characters for Markdown table
-            email="${email//|/\\|}"
-            license_name="${license_name//|/\\|}"
-            license_out_date="${license_out_date//|/\\|}"
+def parse_and_format_license_data(account_file_patterns, key_file_patterns, output_file, max_entries=30):
+    all_entries = []
 
-            # Wrap password and license_key in backticks and escape internal backticks
-            # If the field is empty, ensure it remains empty (not '``')
-            if [[ -n "$password" ]]; then
-                password="\`$(echo "$password" | sed 's/`/\\`/g')\`"
-            else
-                password=""
-            fi
-            if [[ -n "$license_key" ]]; then
-                license_key="\`$(echo "$license_key" | sed 's/`/\\`/g')\`"
-            else
-                license_key=""
-            fi
+    # Read existing entries if the file exists (skip header and separator)
+    if os.path.exists(output_file):
+        with open(output_file, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()
+            if len(lines) > 2: # Skip header and separator lines
+                for line in lines[2:]:
+                    line = line.strip()
+                    if line.startswith('|') and line.endswith('|'):
+                        all_entries.append(line)
 
-            # Only print a row if at least one field has content
-            if [[ -n "$email" || -n "$password" || -n "$license_name" || -n "$license_key" || -n "$license_out_date" ]]; then
-                printf "| %s | %s | %s | %s | %s |\n" "$email" "$password" "$license_name" "$license_key" "$license_out_date"
-            fi
-          }
+    # Process new account and key files
+    for patterns in [account_file_patterns, key_file_patterns]:
+        for pattern in patterns:
+            for filepath in glob.glob(pattern):
+                try:
+                    with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                        # Split by lines of at least 20 hyphens, ensuring blocks are clean
+                        blocks = [block.strip() for block in re.split(r'-{20,}', content) if block.strip()]
+                        
+                        for block in blocks:
+                            email = re.search(r'Account Email: (.*)', block)
+                            password = re.search(r'Account Password: (.*)', block)
+                            license_name = re.search(r'License Name: (.*)', block)
+                            license_key = re.search(r'License Key: (.*)', block)
+                            license_out_date = re.search(r'License Out Date: (.*)', block)
 
-          # Define the temporary file for new entries
-          NEW_ENTRIES_FILE="new_generated_entries.md"
-          # Clear the new entries file before processing
-          > "$NEW_ENTRIES_FILE"
+                            email = email.group(1).strip() if email else ""
+                            password = password.group(1).strip() if password else ""
+                            license_name = license_name.group(1).strip() if license_name else ""
+                            license_key = license_key.group(1).strip() if license_key else ""
+                            license_out_date = license_out_date.group(1).strip() if license_out_date else ""
 
-          # Process ACCOUNTS.txt and KEYS.txt, appending to NEW_ENTRIES_FILE
-          if [[ "$ACCOUNT" != "0" ]]; then
-              if compgen -G "*ACCOUNTS.txt" > /dev/null; then
-                  file_content=$(cat *ACCOUNTS.txt)
-                  echo "$file_content" | awk -v RS="-------------------------------------------------" 'NF { print $0 }' | while IFS= read -r block; do
-                      format_block_to_row "$block" >> "$NEW_ENTRIES_FILE"
-                  done
-              fi
-          fi
+                            # Escape pipe characters for Markdown table
+                            email = email.replace('|', '\\|')
+                            license_name = license_name.replace('|', '\\|')
+                            license_out_date = license_out_date.replace('|', '\\|')
 
-          if [[ "$KEY" != "0" ]]; then
-              if compgen -G "*KEYS.txt" > /dev/null; then
-                  file_content=$(cat *KEYS.txt)
-                  echo "$file_content" | awk -v RS="-------------------------------------------------" 'NF { print $0 }' | while IFS= read -r block; do
-                      format_block_to_row "$block" >> "$NEW_ENTRIES_FILE"
-                  done
-              fi
-          fi
+                            # Wrap password and license_key in backticks and escape internal backticks
+                            password = f'`{password.replace("`", "\\`")}`' if password else ""
+                            license_key = f'`{license_key.replace("`", "\\`")}`' if license_key else ""
 
-          # Now, combine existing and new entries, then trim to 30
-          ALL_ENTRIES_FILE="all_generated_entries.md"
-          # If generated_results.md exists, copy its content (excluding header)
-          if [ -f generated_results.md ]; then
-              tail -n +3 generated_results.md > "$ALL_ENTRIES_FILE"
-          else
-              > "$ALL_ENTRIES_FILE" # Create empty if not exists
-          fi
+                            # Only add row if at least one field has content
+                            if any([email, password, license_name, license_key, license_out_date]):
+                                all_entries.append(f"| {email} | {password} | {license_name} | {license_key} | {license_out_date} |")
 
-          # Append new entries
-          cat "$NEW_ENTRIES_FILE" >> "$ALL_ENTRIES_FILE"
+                except Exception as e:
+                    print(f"Error processing file {filepath}: {e}")
 
-          # Re-write generated_results.md with header and latest 30 entries
-          echo "| Email tài khoản | Mật khẩu tài khoản | Tên giấy phép | Khóa giấy phép | Ngày hết hạn |" > generated_results.md
-          echo "|-----------------|--------------------|---------------|---------------|--------------|" >> generated_results.md
-          tail -n 30 "$ALL_ENTRIES_FILE" >> generated_results.md
+    # Keep only the latest max_entries
+    all_entries = all_entries[-max_entries:]
 
-          # Clean up temporary files
-          rm -f "$NEW_ENTRIES_FILE" "$ALL_ENTRIES_FILE"
+    # Write the final Markdown table
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write("| Email tài khoản | Mật khẩu tài khoản | Tên giấy phép | Khóa giấy phép | Ngày hết hạn |\n")
+        f.write("|-----------------|--------------------|---------------|---------------|--------------|\n")
+        if not all_entries:
+            f.write("| Không có | Không có | Không có | Không có | Không có |\n")
+        else:
+            for entry_row in all_entries:
+                f.write(entry_row + "\n")
+
+# Call the function from the current directory (ESET-KeyGen)
+parse_and_format_license_data(['./*ACCOUNTS.txt'], ['./*KEYS.txt'], 'generated_results.md', 30)
+"
           # Kết thúc logic định dạng và tạo generated_results.md
 
       - name: Cập nhật và đẩy kết quả vào nhánh chính
