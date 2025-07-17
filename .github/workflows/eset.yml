@@ -172,19 +172,13 @@ jobs:
           # Function to extract and format a single license block into a table row
           format_block_to_row() {
             local block="$1"
-            # Use sed to extract each field, handling potential missing fields and newlines
-            local email=$(echo "$block" | sed -n 's/.*Account Email: \(.*\)/\1/p' | tr -d '\r' | head -n 1)
-            local password=$(echo "$block" | sed -n 's/.*Account Password: \(.*\)/\1/p' | tr -d '\r' | head -n 1)
-            local license_name=$(echo "$block" | sed -n 's/.*License Name: \(.*\)/\1/p' | tr -d '\r' | head -n 1)
-            local license_key=$(echo "$block" | sed -n 's/.*License Key: \(.*\)/\1/p' | tr -d '\r' | head -n 1)
-            local license_out_date=$(echo "$block" | sed -n 's/.*License Out Date: \(.*\)/\1/p' | tr -d '\r' | head -n 1)
-
-            # Ensure variables are empty if not found, instead of unset
-            email="${email:-}"
-            password="${password:-}"
-            license_name="${license_name:-}"
-            license_key="${license_key:-}"
-            license_out_date="${license_out_date:-}"
+            # Use grep -oP to extract the value and xargs to trim whitespace and newlines
+            # The '|| echo ""' ensures that if no match is found, an empty string is used
+            local email=$(echo "$block" | grep -oP 'Account Email: \K.*' | xargs || echo "")
+            local password=$(echo "$block" | grep -oP 'Account Password: \K.*' | xargs || echo "")
+            local license_name=$(echo "$block" | grep -oP 'License Name: \K.*' | xargs || echo "")
+            local license_key=$(echo "$block" | grep -oP 'License Key: \K.*' | xargs || echo "")
+            local license_out_date=$(echo "$block" | grep -oP 'License Out Date: \K.*' | xargs || echo "")
 
             echo "| $email | $password | $license_name | $license_key | $license_out_date |" >> generated_results.md
           }
