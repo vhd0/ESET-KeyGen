@@ -21,3 +21,4 @@
 |  |  | ESET HOME Security Premium |  |  |
 |  |  |  | `8TNC-X64S-MHK2-VG5H-HC94` |  |
 |  |  |  |  | 16.08.2025 |
+| dashaseltsam@sedateviana.io | `YZSIby!b7\|f7!s-/%a<#V` | ESET HOME Security Premium | `XWBR-XC6P-ENBS-GUKC-V24W` | 16.08.2025 |
