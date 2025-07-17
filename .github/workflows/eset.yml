@@ -196,7 +196,7 @@ jobs:
           Add-Content -Path generated_results.md -Value "- **Thời gian chạy**: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')"
           Add-Content -Path generated_results.md -Value "- **Hệ điều hành Runner**: ${{ needs.prepare-run.outputs.os }}"
           Add-Content -Path generated_results.md -Value "- **Nhánh kho lưu trữ**: ${{ needs.prepare-run.outputs.branch }}"
-          Add-Content -Path generated_results.md -Value "- **Nhà cung cấp Email**: $MAIL" # Đã sửa lỗi ở đây
+          Add-Content -Path generated_results.md -Value "- **Nhà cung cấp Email**: $MAIL"
           Add-Content -Path generated_results.md -Value "- **Chế độ hoạt động**: $KEY_TYPE"
           Add-Content -Path generated_results.md -Value ""
           # Chạy tạo tài khoản nếu $ACCOUNT không phải là 0
@@ -209,7 +209,7 @@ jobs:
             Add-Content -Path generated_results.md -Value "```"
             Get-Content -Path ./*ACCOUNTS.txt -ErrorAction SilentlyContinue | Add-Content -Path generated_results.md
             if (-not (Test-Path -Path ./*ACCOUNTS.txt) -or (Get-Item ./*ACCOUNTS.txt).Length -eq 0) {
-                "Không có tài khoản nào được tạo." | Add-Content -Path generated_results.md
+                Add-Content -Path generated_results.md -Value "Không có tài khoản nào được tạo."
             }
             Add-Content -Path generated_results.md -Value "```"
             Add-Content -Path generated_results.md -Value ""
@@ -224,7 +224,7 @@ jobs:
             Add-Content -Path generated_results.md -Value "```"
             Get-Content -Path ./*KEYS.txt -ErrorAction SilentlyContinue | Add-Content -Path generated_results.md
             if (-not (Test-Path -Path ./*KEYS.txt) -or (Get-Item ./*KEYS.txt).Length -eq 0) {
-                "Không có khóa nào được tạo." | Add-Content -Path generated_results.md
+                Add-Content -Path generated_results.md -Value "Không có khóa nào được tạo."
             }
             Add-Content -Path generated_results.md -Value "```"
           }
