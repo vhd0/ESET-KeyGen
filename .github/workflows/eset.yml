@@ -172,11 +172,19 @@ jobs:
           # Function to extract and format a single license block into a table row
           format_block_to_row() {
             local block="$1"
-            local email=$(echo "$block" | grep -oP 'Account Email: \K.*' | tr -d '\r')
-            local password=$(echo "$block" | grep -oP 'Account Password: \K.*' | tr -d '\r')
-            local license_name=$(echo "$block" | grep -oP 'License Name: \K.*' | tr -d '\r')
-            local license_key=$(echo "$block" | grep -oP 'License Key: \K.*' | tr -d '\r')
-            local license_out_date=$(echo "$block" | grep -oP 'License Out Date: \K.*' | tr -d '\r')
+            # Use sed to extract each field, handling potential missing fields and newlines
+            local email=$(echo "$block" | sed -n 's/.*Account Email: \(.*\)/\1/p' | tr -d '\r' | head -n 1)
+            local password=$(echo "$block" | sed -n 's/.*Account Password: \(.*\)/\1/p' | tr -d '\r' | head -n 1)
+            local license_name=$(echo "$block" | sed -n 's/.*License Name: \(.*\)/\1/p' | tr -d '\r' | head -n 1)
+            local license_key=$(echo "$block" | sed -n 's/.*License Key: \(.*\)/\1/p' | tr -d '\r' | head -n 1)
+            local license_out_date=$(echo "$block" | sed -n 's/.*License Out Date: \(.*\)/\1/p' | tr -d '\r' | head -n 1)
+
+            # Ensure variables are empty if not found, instead of unset
+            email="${email:-}"
+            password="${password:-}"
+            license_name="${license_name:-}"
+            license_key="${license_key:-}"
+            license_out_date="${license_out_date:-}"
 
             echo "| $email | $password | $license_name | $license_key | $license_out_date |" >> generated_results.md
           }
@@ -189,6 +197,7 @@ jobs:
           if [[ "$ACCOUNT" != "0" ]]; then
               if compgen -G "*ACCOUNTS.txt" > /dev/null; then
                   file_content=$(cat *ACCOUNTS.txt)
+                  # Split content by the delimiter and process each block
                   echo "$file_content" | awk -v RS="-------------------------------------------------" 'NF { print $0 }' | while IFS= read -r block; do
                       format_block_to_row "$block"
                   done
@@ -201,6 +210,7 @@ jobs:
           if [[ "$KEY" != "0" ]]; then
               if compgen -G "*KEYS.txt" > /dev/null; then
                   file_content=$(cat *KEYS.txt)
+                  # Split content by the delimiter and process each block
                   echo "$file_content" | awk -v RS="-------------------------------------------------" 'NF { print $0 }' | while IFS= read -r block; do
                       format_block_to_row "$block"
                   done
