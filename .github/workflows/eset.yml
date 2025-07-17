@@ -223,26 +223,34 @@ jobs:
           }
 
           # Bắt đầu logic định dạng và tạo generated_results.md cho Windows bằng Python
+          $account_val = $ACCOUNT
+          $key_val = $KEY
+          $os_val = "${{ needs.prepare-run.outputs.os }}"
+          $branch_val = "${{ needs.prepare-run.outputs.branch }}"
+          $mail_val = $MAIL
+          $key_type_val = $KEY_TYPE
+
           $scriptContent = @"
 import os
 import glob
 import datetime
+import sys
 
 def format_results(account_count, key_count, os_name, branch_name, mail_provider, key_type):
     output_content = []
 
     output_content.append("# Kết quả tạo tài khoản và khóa")
     output_content.append("## Thông tin chạy")
-    output_content.append(f"- **Thời gian chạy**: {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
-    output_content.append(f"- **Hệ điều hành Runner**: {os_name}")
-    output_content.append(f"- **Nhánh kho lưu trữ**: {branch_name}")
-    output_content.append(f"- **Nhà cung cấp Email**: {mail_provider}")
-    output_content.append(f"- **Chế độ hoạt động**: {key_type}")
+    output_content.append(f"- **Thời gian chạy**: {{{{datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}}}}")
+    output_content.append(f"- **Hệ điều hành Runner**: {{{{os_name}}}}")
+    output_content.append(f"- **Nhánh kho lưu trữ**: {{{{branch_name}}}}")
+    output_content.append(f"- **Nhà cung cấp Email**: {{{{mail_provider}}}}")
+    output_content.append(f"- **Chế độ hoạt động**: {{{{key_type}}}}")
     output_content.append("")
 
     # Process Accounts
     if account_count != "0":
-        output_content.append(f"## Tài khoản đã tạo ({account_count} tài khoản)")
+        output_content.append(f"## Tài khoản đã tạo ({{{{account_count}}}} tài khoản)")
         output_content.append("```")
         account_files = glob.glob("*ACCOUNTS.txt")
         if account_files:
@@ -251,7 +259,7 @@ def format_results(account_count, key_count, os_name, branch_name, mail_provider
                     with open(acc_file, 'r', encoding='utf-8', errors='ignore') as f:
                         output_content.extend(f.readlines())
                 except Exception as e:
-                    output_content.append(f"Lỗi khi đọc tệp {acc_file}: {e}")
+                    output_content.append(f"Lỗi khi đọc tệp {{{{acc_file}}}}: {{{{e}}}}")
         else:
             output_content.append("Không có tài khoản nào được tạo.")
         output_content.append("```")
@@ -259,7 +267,7 @@ def format_results(account_count, key_count, os_name, branch_name, mail_provider
 
     # Process Keys
     if key_count != "0":
-        output_content.append(f"## Khóa đã tạo ({key_count} khóa)")
+        output_content.append(f"## Khóa đã tạo ({{{{key_count}}}} khóa)")
         output_content.append("```")
         key_files = glob.glob("*KEYS.txt")
         if key_files:
@@ -268,7 +276,7 @@ def format_results(account_count, key_count, os_name, branch_name, mail_provider
                     with open(key_file, 'r', encoding='utf-8', errors='ignore') as f:
                         output_content.extend(f.readlines())
                 except Exception as e:
-                    output_content.append(f"Lỗi khi đọc tệp {key_file}: {e}")
+                    output_content.append(f"Lỗi khi đọc tệp {{{{key_file}}}}: {{{{e}}}}")
         else:
             output_content.append("Không có khóa nào được tạo.")
         output_content.append("```")
@@ -276,19 +284,19 @@ def format_results(account_count, key_count, os_name, branch_name, mail_provider
     with open("generated_results.md", "w", encoding="utf-8") as f:
         f.write("\n".join(output_content))
 
-# Lấy các biến từ môi trường PowerShell
-account_count = "$ACCOUNT"
-key_count = "$KEY"
-os_name = "${{ needs.prepare-run.outputs.os }}"
-branch_name = "${{ needs.prepare-run.outputs.branch }}"
-mail_provider = "$MAIL"
-key_type = "$KEY_TYPE"
+# Lấy các biến từ đối số dòng lệnh
+account_count = sys.argv[1]
+key_count = sys.argv[2]
+os_name = sys.argv[3]
+branch_name = sys.argv[4]
+mail_provider = sys.argv[5]
+key_type = sys.argv[6]
 
 format_results(account_count, key_count, os_name, branch_name, mail_provider, key_type)
 "@
           $scriptFile = "format_results.py"
           Set-Content -Path $scriptFile -Value $scriptContent -Encoding UTF8
-          python $scriptFile
+          python $scriptFile "$account_val" "$key_val" "$os_val" "$branch_val" "$mail_val" "$key_type_val"
           # Kết thúc logic định dạng và tạo generated_results.md cho Windows bằng Python
 
       - name: Tải lên kết quả đã tạo
