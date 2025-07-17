@@ -215,7 +215,7 @@ jobs:
           Add-Content -Path generated_results.md -Value "- **Thời gian chạy**: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')"
           Add-Content -Path generated_results.md -Value "- **Hệ điều hành Runner**: ${{ needs.prepare-run.outputs.os }}"
           Add-Content -Path generated_results.md -Value "- **Nhánh kho lưu trữ**: ${{ needs.prepare-run.outputs.branch }}"
-          Add-Content -Path -Path generated_results.md -Value "- **Nhà cung cấp Email**: $MAIL"
+          Add-Content -Path generated_results.md -Value "- **Nhà cung cấp Email**: $MAIL" # Đã sửa lỗi ở đây
           Add-Content -Path generated_results.md -Value "- **Chế độ hoạt động**: $KEY_TYPE"
           Add-Content -Path generated_results.md -Value ""
 
