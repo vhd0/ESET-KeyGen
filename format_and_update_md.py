@@ -15,8 +15,9 @@ def format_field_for_markdown(field_name, value):
     cleaned_value = clean_value(value)
     if field_name in ["password", "license_key"]:
         if cleaned_value:
-            # Escape backticks within the value itself
-            return f'`{cleaned_value.replace("`", "\\`")}`'
+            # Escape backticks within the value itself before putting into f-string
+            escaped_value = cleaned_value.replace("`", "\\`")
+            return f'`{escaped_value}`'
         return "" # Return empty string if value is empty, not empty backticks
     return cleaned_value
 
