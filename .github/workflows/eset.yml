@@ -113,6 +113,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }} # Đảm bảo GITHUB_TOKEN được sử dụng để checkout
+          # Checkout nhánh đích để đảm bảo git push hoạt động đúng cách
+          ref: ${{ needs.prepare-run.outputs.branch }} 
       
       - name: Thiết lập & Chạy Script (Đa nền tảng)
         shell: bash # Sử dụng Bash cho tất cả các hệ điều hành để nhất quán
@@ -184,6 +186,6 @@ jobs:
           git diff-index --quiet HEAD || git commit -m "Cập nhật kết quả tạo tài khoản và khóa tự động"
           
           # Đẩy lên nhánh đã chọn
-          git push origin ${{ needs.prepare-run.outputs.branch }}
+          git push origin HEAD:${{ needs.prepare-run.outputs.branch }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Cần token để đẩy lên repo
