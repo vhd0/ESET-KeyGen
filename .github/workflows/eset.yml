@@ -148,27 +148,67 @@ jobs:
           pip install -r requirements.txt
           
           # Gán các biến từ đầu ra của job 'prepare-run'
-          ACCOUNT="${{ needs.prepare-run.outputs.account }}"
-          KEY="${{ needs.prepare-run.outputs.key }}"
-          MAIL="${{ needs.prepare-run.outputs.mail }}"
-          KEY_TYPE="${{ needs.prepare-run.outputs.key_type }}"
+          INITIAL_ACCOUNT="${{ needs.prepare-run.outputs.account }}"
+          INITIAL_KEY="${{ needs.prepare-run.outputs.key }}"
+          INITIAL_MAIL="${{ needs.prepare-run.outputs.mail }}"
+          INITIAL_KEY_TYPE="${{ needs.prepare-run.outputs.key_type }}"
+
           echo "Đang chạy với:"
-          echo "  Tài khoản: $ACCOUNT"
-          echo "  Khóa: $KEY"
-          echo "  Email: $MAIL"
-          echo "  Loại khóa: $KEY_TYPE"
-          
-          # Chạy tạo tài khoản nếu ACCOUNT không phải là 0
-          if [[ "$ACCOUNT" != "0" ]]; then
-            python3 main.py --auto-detect-browser --account --email-api "$MAIL" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat "$ACCOUNT"
-            echo "### Tài khoản đã tạo" >> $GITHUB_STEP_SUMMARY
-            cat ./*ACCOUNTS.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "Không có" >> $GITHUB_STEP_SUMMARY
-          fi
-          # Chạy tạo khóa nếu KEY không phải là 0
-          if [[ "$KEY" != "0" ]]; then
-            python3 main.py --auto-detect-browser "$KEY_TYPE" --email-api "$MAIL" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat "$KEY"
-            echo -e "\n### Khóa đã tạo" >> $GITHUB_STEP_SUMMARY
-            cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "Không có" >> $GITHUB_STEP_SUMMARY
+          echo "  Tài khoản: $INITIAL_ACCOUNT"
+          echo "  Khóa: $INITIAL_KEY"
+          echo "  Email: $INITIAL_MAIL"
+          echo "  Loại khóa: $INITIAL_KEY_TYPE"
+
+          # Define pools for retries (can be a subset or all options)
+          # Add initial selection to the front of the list to try it first
+          MAIL_OPTIONS=("${INITIAL_MAIL}" "1secmail" "guerrillamail" "developermail" "mailticking" "fakemail" "inboxes" "incognitomail" "emailfake")
+          KEY_TYPE_OPTIONS=("${INITIAL_KEY_TYPE}" "--key" "--small-business-key")
+
+          # Flag to indicate if a key was successfully generated
+          KEY_GENERATED="false"
+
+          # Loop through mail options
+          for mail_provider in "${MAIL_OPTIONS[@]}"; do
+              # Loop through key type options
+              for key_type_option in "${KEY_TYPE_OPTIONS[@]}"; do
+                  echo "Thử tạo khóa với Email: $mail_provider, Loại khóa: $key_type_option"
+
+                  # Clean up previous attempt's output files
+                  rm -f ./*ACCOUNTS.txt ./*KEYS.txt
+
+                  # Run main.py for accounts if needed
+                  if [[ "$INITIAL_ACCOUNT" != "0" ]]; then
+                      python3 main.py --auto-detect-browser --account --email-api "$mail_provider" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat "$INITIAL_ACCOUNT"
+                      # No need to check success for accounts, just try to generate keys
+                  fi
+
+                  # Run main.py for keys
+                  if [[ "$INITIAL_KEY" != "0" ]]; then
+                      python3 main.py --auto-detect-browser "$key_type_option" --email-api "$mail_provider" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat "$INITIAL_KEY"
+                      
+                      # Check if keys were successfully generated
+                      if grep -q "License Key:" ./*KEYS.txt 2>/dev/null; then
+                          echo "Đã tạo khóa thành công với Email: $mail_provider, Loại khóa: $key_type_option"
+                          KEY_GENERATED="true"
+                          break 2 # Break out of both loops
+                      else
+                          echo "Không tạo được khóa với Email: $mail_provider, Loại khóa: $key_type_option. Thử lại..."
+                      fi
+                  else
+                      # If KEY is 0, we still want to process accounts if any
+                      KEY_GENERATED="true" # Treat as successful if no keys were requested
+                      break 2
+                  fi
+              done
+              if [[ "$KEY_GENERATED" == "true" ]]; then
+                  break # Break outer loop if key generated
+              fi
+          done
+
+          if [[ "$KEY_GENERATED" == "false" && "$INITIAL_KEY" != "0" ]]; then
+              echo "Lỗi: Không thể tạo khóa sau khi thử tất cả các tổ hợp."
+              # Nếu bạn muốn job thất bại khi không thể tạo khóa, hãy bỏ comment dòng dưới
+              # exit 1
           fi
 
           # Thực thi script Python để định dạng và cập nhật Markdown
