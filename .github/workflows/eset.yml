@@ -1,9 +1,8 @@
 name: Automated Account and Key Generator
+
 on:
-  # Lên lịch chạy hàng ngày vào lúc 00:00 UTC
   schedule:
     - cron: "0 0 * * *"
-  # Cho phép chạy thủ công từ giao diện GitHub Actions
   workflow_dispatch:
     inputs:
       account:
@@ -12,41 +11,10 @@ on:
         default: '0'
         type: string
       key:
-        description: 'Số lượng khóa cần tạo (mặc định = 1)'
+        description: 'Số lượng khóa cần tạo (mặc định = 1)' 
         required: false
         default: '1'
         type: string
-      mail:
-        description: 'Chọn nhà cung cấp email để tạo giấy phép'
-        required: true
-        type: choice
-        options:
-          - 1secmail
-          - guerrillamail
-          - developermail
-          - mailticking
-          - fakemail
-          - inboxes
-          - incognitomail
-          - emailfake
-        default: emailfake
-      key_type:
-        description: 'Chế độ hoạt động'
-        required: true
-        type: choice
-        options:
-          - --key
-          - --small-business-key
-        default: --key
-      os:
-        description: 'Hệ điều hành của runner (Linux, macOS, Windows)'
-        required: true
-        type: choice
-        options:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
-        default: windows-latest
       branch:
         description: "Nhánh kho lưu trữ (không chạm vào nếu bạn không biết gì về nó!!!)"
         required: false
@@ -57,175 +25,193 @@ on:
         default: main
 
 jobs:
-  prepare-run:
-    runs-on: ubuntu-latest
-    # Luôn chạy job này để xác định các biến đầu vào, dù là thủ công hay tự động
-    outputs:
-      account: ${{ steps.set-vars.outputs.account }}
-      key: ${{ steps.set-vars.outputs.key }}
-      mail: ${{ steps.set-vars.outputs.mail }}
-      key_type: ${{ steps.set-vars.outputs.key_type }}
-      os: ${{ steps.set-vars.outputs.os }}
-      branch: ${{ steps.set-vars.outputs.branch }}
-    steps:
-      - name: Đặt biến dựa trên loại trigger
-        id: set-vars
-        shell: bash
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            # Sử dụng các giá trị nhập từ workflow_dispatch nếu chạy thủ công
-            echo "account=${{ github.event.inputs.account || '0' }}" >> $GITHUB_OUTPUT
-            echo "key=${{ github.event.inputs.key || '1' }}" >> $GITHUB_OUTPUT
-            echo "mail=${{ github.event.inputs.mail || 'emailfake' }}" >> $GITHUB_OUTPUT
-            echo "key_type=${{ github.event.inputs.key_type || '--key' }}" >> $GITHUB_OUTPUT
-            echo "os=${{ github.event.inputs.os || 'windows-latest' }}" >> $GITHUB_OUTPUT
-            echo "branch=${{ github.event.inputs.branch || 'main' }}" >> $GITHUB_OUTPUT
-            echo "Chạy thủ công với các giá trị đã chọn."
-          else # Sự kiện schedule (lịch trình)
-            # Định nghĩa các tùy chọn để ngẫu nhiên hóa
-            mail_options=("1secmail" "guerrillamail" "developermail" "mailticking" "fakemail" "inboxes" "incognitomail" "emailfake")
-            key_type_options=("--key" "--small-business-key")
-            os_options=("ubuntu-latest" "macos-latest" "windows-latest")
-            branch_options=("main" "test")
-            # Chọn ngẫu nhiên các giá trị
-            random_mail=${mail_options[$RANDOM % ${#mail_options[@]}]}
-            random_key_type=${key_type_options[$RANDOM % ${#key_type_options[@]}]}
-            random_os=${os_options[$RANDOM % ${#os_options[@]}]}
-            random_branch=${branch_options[$RANDOM % ${#branch_options[@]}]}
-            echo "account=0" >> $GITHUB_OUTPUT
-            echo "key=1" >> $GITHUB_OUTPUT
-            echo "mail=$random_mail" >> $GITHUB_OUTPUT
-            echo "key_type=$random_key_type" >> $GITHUB_OUTPUT
-            echo "os=$random_os" >> $GITHUB_OUTPUT
-            echo "branch=$random_branch" >> $GITHUB_OUTPUT
-            echo "Chạy tự động với các giá trị ngẫu nhiên."
-          fi
-
   generate-account-and-key:
-    # Job này phụ thuộc vào 'prepare-run' để lấy các đầu vào đã được xác định
-    needs: prepare-run
-    # Sử dụng hệ điều hành được chọn từ job trước
-    runs-on: ${{ needs.prepare-run.outputs.os }}
+    runs-on: ubuntu-latest
     permissions:
-      contents: write # Cấp quyền ghi cho GITHUB_TOKEN để đẩy thay đổi
+      contents: write
     steps:
       - name: Kiểm tra kho lưu trữ
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }} # Đảm bảo GITHUB_TOKEN được sử dụng để checkout
-          # Checkout nhánh đích để đảm bảo git push hoạt động đúng cách
-          ref: ${{ needs.prepare-run.outputs.branch }} 
-      
-      - name: Thiết lập & Chạy Script (Đa nền tảng)
-        shell: bash # Sử dụng Bash cho tất cả các hệ điều hành để nhất quán
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.event.inputs.branch || 'main' }}
+
+      - name: Thiết lập môi trường Python
         run: |
-          # Cài đặt Python và các phụ thuộc
-          if command -v brew &> /dev/null; then
-            # macOS
-            brew install python@3.11 || true
-          elif command -v apt-get &> /dev/null; then
-            # Linux
-            sudo apt update
-            sudo apt install -y python3-pip python3-venv
-          elif command -v python &> /dev/null; then
-            # Windows (Git Bash/WSL) - Python thường đã có sẵn
-            echo "Python đã có sẵn trên Windows runner."
-          else
-            echo "Lỗi: Không tìm thấy Python. Vui lòng cài đặt Python trên runner."
+          sudo apt update
+          sudo apt install -y python3-pip python3-venv timeout
+
+      - name: Tạo script Python xử lý kết quả
+        shell: bash
+        run: |
+          cat > format_results.py << 'EOF'
+          import re
+          import os
+          from datetime import datetime
+
+          def parse_keys_file(filename):
+              results = []
+              key = email = password = exp_date = None
+              with open(filename, 'r', encoding='utf-8') as f:
+                  for line in f:
+                      if 'License Key:' in line:
+                          key = line.split()[-1]
+                      elif 'Account Email:' in line:
+                          email = line.split()[-1]
+                      elif 'Account Password:' in line:
+                          password = line.split('Account Password:')[-1].strip()
+                      elif 'License Out Date:' in line:
+                          date_str = line.split()[-1]
+                          match = re.search(r'(\d{2})[./](\d{2})[./](\d{4})', date_str)
+                          if match:
+                              day, month, year = match.groups()
+                              exp_date = f"{year}-{month}-{day}"
+                          if all([key, email, password, exp_date]):
+                              results.append({
+                                  'key': key,
+                                  'username': email,
+                                  'password': password,
+                                  'expires_date': exp_date
+                              })
+                              key = email = password = exp_date = None
+              return results
+
+          def main():
+              key_files = [f for f in os.listdir('.') if f.endswith('KEYS.txt')]
+              if not key_files:
+                  print("No KEYS.txt file found.")
+                  return
+              key_file = key_files[0]
+              results = parse_keys_file(key_file)
+              
+              # Ghi file Markdown
+              with open('../generated_results.md', 'w', encoding='utf-8') as f:
+                  now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+                  user = os.environ.get('GITHUB_ACTOR', 'unknown')
+                  current_os = os.environ.get('CURRENT_OS', 'unknown')
+                  f.write(f"# Kết quả tạo tài khoản và khóa\n\n")
+                  f.write(f"_Generated at: {now} UTC by {user}_\n\n")
+                  f.write(f"_OS: {current_os}_\n\n")
+                  if results:
+                      f.write("| Key | Username | Password | Expires Date |\n")
+                      f.write("|-----|----------|----------|--------------|\n")
+                      for r in results:
+                          f.write(f"| {r['key']} | {r['username']} | {r['password']} | {r['expires_date']} |\n")
+                  else:
+                      f.write("Không có kết quả hợp lệ.\n")
+
+          if __name__ == '__main__':
+              main()
+          EOF
+
+      - name: Thử tất cả tổ hợp cho đến khi thành công
+        shell: bash
+        env:
+          ACCOUNT: ${{ github.event.inputs.account || '0' }}
+          KEY: ${{ github.event.inputs.key || '1' }}
+        run: |
+          # Clone tool
+          git clone -b ${{ github.event.inputs.branch || 'main' }} https://github.com/rzc0d3r/ESET-KeyGen.git
+          cd ESET-KeyGen
+          
+          # Tạo và kích hoạt venv
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+
+          # Định nghĩa tất cả tổ hợp có thể
+          MAIL_PROVIDERS=("1secmail" "guerrillamail" "developermail" "mailticking" "fakemail" "inboxes" "incognitomail" "emailfake")
+          KEY_TYPES=("--key" "--small-business-key")
+          OS_LIST=("Linux" "Windows" "macOS")
+          
+          # Random thứ tự các tổ hợp
+          SHUFFLED_MAILS=($(printf "%s\n" "${MAIL_PROVIDERS[@]}" | shuf))
+          SHUFFLED_KEYS=($(printf "%s\n" "${KEY_TYPES[@]}" | shuf))
+          SHUFFLED_OS=($(printf "%s\n" "${OS_LIST[@]}" | shuf))
+
+          SUCCESS=0
+          echo "Bắt đầu thử các tổ hợp ngẫu nhiên..."
+
+          # Function để kiểm tra thành công
+          check_success() {
+            if ls *KEYS.txt 1> /dev/null 2>&1 && grep -q "License Key:" *KEYS.txt; then
+              return 0
+            fi
+            return 1
+          }
+
+          # Thử từng tổ hợp cho đến khi thành công
+          for CURRENT_OS in "${SHUFFLED_OS[@]}"; do
+            export CURRENT_OS
+            echo "=== Thử với OS: $CURRENT_OS ==="
+            
+            for MAIL in "${SHUFFLED_MAILS[@]}"; do
+              for KEY_TYPE in "${SHUFFLED_KEYS[@]}"; do
+                echo "=== Thử tổ hợp: OS=$CURRENT_OS, Mail=$MAIL, Key Type=$KEY_TYPE ==="
+                
+                # Xóa file kết quả cũ
+                rm -f *KEYS.txt *ACCOUNTS.txt
+                
+                # Chạy tạo account nếu cần (với timeout 90s)
+                if [[ "$ACCOUNT" != "0" ]]; then
+                  echo "Tạo $ACCOUNT tài khoản với $MAIL..."
+                  timeout 90s python3 main.py --auto-detect-browser --account --email-api "$MAIL" \
+                    --skip-update-check --no-logo --disable-progress-bar --disable-logging \
+                    --repeat "$ACCOUNT" || echo "Account generation timed out after 90s"
+                fi
+                
+                # Chạy tạo key nếu cần (với timeout 90s)
+                if [[ "$KEY" != "0" ]]; then
+                  echo "Tạo $KEY khóa với $MAIL và $KEY_TYPE..."
+                  timeout 90s python3 main.py --auto-detect-browser "$KEY_TYPE" --email-api "$MAIL" \
+                    --skip-update-check --no-logo --disable-progress-bar --disable-logging \
+                    --repeat "$KEY" || echo "Key generation timed out after 90s"
+
+                  # Kiểm tra kết quả
+                  if check_success; then
+                    echo "✅ Tạo khóa thành công với OS=$CURRENT_OS!"
+                    SUCCESS=1
+                    break 3  # Thoát khỏi cả 3 vòng lặp
+                  else
+                    echo "❌ Không thể tạo khóa với tổ hợp này, thử tổ hợp tiếp theo..."
+                  fi
+                else
+                  # Nếu không cần tạo key, coi như thành công
+                  SUCCESS=1
+                  break 3
+                fi
+              done
+            done
+          done
+
+          # Kiểm tra kết quả cuối cùng
+          if [[ $SUCCESS -eq 0 ]]; then
+            echo "❌ Đã thử tất cả tổ hợp nhưng không thành công!"
             exit 1
           fi
 
-          # Tạo và kích hoạt môi trường ảo Python
-          python3 -m venv venv
-          # Kích hoạt venv tùy thuộc vào OS
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            source venv/Scripts/activate # Đối với Windows runners (Git Bash/WSL)
-          else
-            source venv/bin/activate # Đối với Linux/macOS
-          fi
-          
-          # Cài đặt các phụ thuộc Python
-          pip install -r requirements.txt
-          
-          # Gán các biến từ đầu ra của job 'prepare-run'
-          INITIAL_ACCOUNT="${{ needs.prepare-run.outputs.account }}"
-          INITIAL_KEY="${{ needs.prepare-run.outputs.key }}"
-          INITIAL_MAIL="${{ needs.prepare-run.outputs.mail }}"
-          INITIAL_KEY_TYPE="${{ needs.prepare-run.outputs.key_type }}"
+          cd ..
+          # Format kết quả
+          python3 format_results.py
 
-          echo "Đang chạy với:"
-          echo "  Tài khoản: $INITIAL_ACCOUNT"
-          echo "  Khóa: $INITIAL_KEY"
-          echo "  Email: $INITIAL_MAIL"
-          echo "  Loại khóa: $INITIAL_KEY_TYPE"
-
-          # Define pools for retries (can be a subset or all options)
-          # Add initial selection to the front of the list to try it first
-          MAIL_OPTIONS=("${INITIAL_MAIL}" "1secmail" "guerrillamail" "developermail" "mailticking" "fakemail" "inboxes" "incognitomail" "emailfake")
-          KEY_TYPE_OPTIONS=("${INITIAL_KEY_TYPE}" "--key" "--small-business-key")
-
-          # Flag to indicate if a key was successfully generated
-          KEY_GENERATED="false"
-
-          # Loop through mail options
-          for mail_provider in "${MAIL_OPTIONS[@]}"; do
-              # Loop through key type options
-              for key_type_option in "${KEY_TYPE_OPTIONS[@]}"; do
-                  echo "Thử tạo khóa với Email: $mail_provider, Loại khóa: $key_type_option"
-
-                  # Clean up previous attempt's output files
-                  rm -f ./*ACCOUNTS.txt ./*KEYS.txt
-
-                  # Run main.py for accounts if needed
-                  if [[ "$INITIAL_ACCOUNT" != "0" ]]; then
-                      python3 main.py --auto-detect-browser --account --email-api "$mail_provider" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat "$INITIAL_ACCOUNT"
-                      # No need to check success for accounts, just try to generate keys
-                  fi
-
-                  # Run main.py for keys
-                  if [[ "$INITIAL_KEY" != "0" ]]; then
-                      python3 main.py --auto-detect-browser "$key_type_option" --email-api "$mail_provider" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat "$INITIAL_KEY"
-                      
-                      # Check if keys were successfully generated
-                      if grep -q "License Key:" ./*KEYS.txt 2>/dev/null; then
-                          echo "Đã tạo khóa thành công với Email: $mail_provider, Loại khóa: $key_type_option"
-                          KEY_GENERATED="true"
-                          break 2 # Break out of both loops
-                      else
-                          echo "Không tạo được khóa với Email: $mail_provider, Loại khóa: $key_type_option. Thử lại..."
-                      fi
-                  else
-                      # If KEY is 0, we still want to process accounts if any
-                      KEY_GENERATED="true" # Treat as successful if no keys were requested
-                      break 2
-                  fi
-              done
-              if [[ "$KEY_GENERATED" == "true" ]]; then
-                  break # Break outer loop if key generated
-              fi
-          done
-
-          if [[ "$KEY_GENERATED" == "false" && "$INITIAL_KEY" != "0" ]]; then
-              echo "Lỗi: Không thể tạo khóa sau khi thử tất cả các tổ hợp."
-              # Nếu bạn muốn job thất bại khi không thể tạo khóa, hãy bỏ comment dòng dưới
-              # exit 1
-          fi
-
-          # Thực thi script Python để định dạng và cập nhật Markdown
-          python3 format_and_update_md.py
-          # Kết thúc logic định dạng và tạo generated_results.md
-
-      - name: Cập nhật và đẩy kết quả vào nhánh chính
-        if: success() || failure() # Chạy ngay cả khi các bước trước có lỗi nhẹ
+      - name: Cập nhật và đẩy kết quả
+        if: success()
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Kiểm tra xem có thay đổi nào trong generated_results.md không
-          git add generated_results.md
-          git diff-index --quiet HEAD || git commit -m "Cập nhật kết quả tạo tài khoản và khóa tự động"
-          
-          # Đẩy lên nhánh đã chọn
-          git push origin HEAD:${{ needs.prepare-run.outputs.branch }}
+
+          if [ -f "generated_results.md" ]; then
+            git add generated_results.md
+            if ! git diff --cached --quiet; then
+              git commit -m "Cập nhật kết quả từ $CURRENT_OS [skip ci]"
+              git push origin HEAD:${{ github.event.inputs.branch || 'main' }}
+            else
+              echo "Không có thay đổi để commit/push."
+            fi
+          fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Cần token để đẩy lên repo
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+permissions:
+  contents: write
