@@ -39,7 +39,7 @@ jobs:
       - name: Thiết lập môi trường Python
         run: |
           sudo apt update
-          sudo apt install -y python3-pip python3-venv timeout
+          sudo apt install -y python3-pip python3-venv
 
       - name: Tạo script Python xử lý kết quả
         shell: bash
@@ -132,6 +132,36 @@ jobs:
           SUCCESS=0
           echo "Bắt đầu thử các tổ hợp ngẫu nhiên..."
 
+          # Function để chạy command với timeout
+          run_with_timeout() {
+            local timeout_duration=90
+            local command=("$@")
+            
+            # Tạo file temp để kiểm tra PID
+            temp_file=$(mktemp)
+            
+            # Chạy command trong background
+            "${command[@]}" & pid=$!
+            
+            # Chờ trong timeout_duration giây
+            for ((i=1; i<=timeout_duration; i++)); do
+              if ! kill -0 $pid 2>/dev/null; then
+                # Process đã kết thúc
+                wait $pid
+                rm -f "$temp_file"
+                return $?
+              fi
+              sleep 1
+            done
+            
+            # Kill process nếu vẫn còn chạy
+            kill -9 $pid 2>/dev/null
+            wait $pid 2>/dev/null
+            rm -f "$temp_file"
+            echo "Process timed out after ${timeout_duration}s"
+            return 124
+          }
+
           # Function để kiểm tra thành công
           check_success() {
             if ls *KEYS.txt 1> /dev/null 2>&1 && grep -q "License Key:" *KEYS.txt; then
@@ -152,20 +182,20 @@ jobs:
                 # Xóa file kết quả cũ
                 rm -f *KEYS.txt *ACCOUNTS.txt
                 
-                # Chạy tạo account nếu cần (với timeout 90s)
+                # Chạy tạo account nếu cần
                 if [[ "$ACCOUNT" != "0" ]]; then
                   echo "Tạo $ACCOUNT tài khoản với $MAIL..."
-                  timeout 90s python3 main.py --auto-detect-browser --account --email-api "$MAIL" \
+                  run_with_timeout python3 main.py --auto-detect-browser --account --email-api "$MAIL" \
                     --skip-update-check --no-logo --disable-progress-bar --disable-logging \
-                    --repeat "$ACCOUNT" || echo "Account generation timed out after 90s"
+                    --repeat "$ACCOUNT"
                 fi
                 
-                # Chạy tạo key nếu cần (với timeout 90s)
+                # Chạy tạo key nếu cần
                 if [[ "$KEY" != "0" ]]; then
                   echo "Tạo $KEY khóa với $MAIL và $KEY_TYPE..."
-                  timeout 90s python3 main.py --auto-detect-browser "$KEY_TYPE" --email-api "$MAIL" \
+                  run_with_timeout python3 main.py --auto-detect-browser "$KEY_TYPE" --email-api "$MAIL" \
                     --skip-update-check --no-logo --disable-progress-bar --disable-logging \
-                    --repeat "$KEY" || echo "Key generation timed out after 90s"
+                    --repeat "$KEY"
 
                   # Kiểm tra kết quả
                   if check_success; then
