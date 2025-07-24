@@ -41,69 +41,6 @@ jobs:
           sudo apt update
           sudo apt install -y python3-pip python3-venv
 
-      - name: Tạo script Python xử lý kết quả
-        shell: bash
-        run: |
-          cat > format_results.py << 'EOF'
-          import re
-          import os
-          from datetime import datetime
-
-          def parse_keys_file(filename):
-              results = []
-              key = email = password = exp_date = None
-              with open(filename, 'r', encoding='utf-8') as f:
-                  for line in f:
-                      if 'License Key:' in line:
-                          key = line.split()[-1]
-                      elif 'Account Email:' in line:
-                          email = line.split()[-1]
-                      elif 'Account Password:' in line:
-                          password = line.split('Account Password:')[-1].strip()
-                      elif 'License Out Date:' in line:
-                          date_str = line.split()[-1]
-                          match = re.search(r'(\d{2})[./](\d{2})[./](\d{4})', date_str)
-                          if match:
-                              day, month, year = match.groups()
-                              exp_date = f"{year}-{month}-{day}"
-                          if all([key, email, password, exp_date]):
-                              results.append({
-                                  'key': key,
-                                  'username': email,
-                                  'password': password,
-                                  'expires_date': exp_date
-                              })
-                              key = email = password = exp_date = None
-              return results
-
-          def main():
-              key_files = [f for f in os.listdir('.') if f.endswith('KEYS.txt')]
-              if not key_files:
-                  print("No KEYS.txt file found.")
-                  return
-              key_file = key_files[0]
-              results = parse_keys_file(key_file)
-              
-              # Ghi file Markdown
-              with open('../generated_results.md', 'w', encoding='utf-8') as f:
-                  now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-                  user = os.environ.get('GITHUB_ACTOR', 'unknown')
-                  current_os = os.environ.get('CURRENT_OS', 'unknown')
-                  f.write(f"# Kết quả tạo tài khoản và khóa\n\n")
-                  f.write(f"_Generated at: {now} UTC by {user}_\n\n")
-                  f.write(f"_OS: {current_os}_\n\n")
-                  if results:
-                      f.write("| Key | Username | Password | Expires Date |\n")
-                      f.write("|-----|----------|----------|--------------|\n")
-                      for r in results:
-                          f.write(f"| {r['key']} | {r['username']} | {r['password']} | {r['expires_date']} |\n")
-                  else:
-                      f.write("Không có kết quả hợp lệ.\n")
-
-          if __name__ == '__main__':
-              main()
-          EOF
-
       - name: Thử tất cả tổ hợp cho đến khi thành công
         shell: bash
         env:
@@ -162,12 +99,42 @@ jobs:
             return 124
           }
 
-          # Function để kiểm tra thành công
-          check_success() {
-            if ls *KEYS.txt 1> /dev/null 2>&1 && grep -q "License Key:" *KEYS.txt; then
-              return 0
-            fi
-            return 1
+          # Function để parse kết quả và tạo markdown
+          parse_and_create_markdown() {
+            local output_file="$1"
+            local results_file="../generated_results.md"
+            local current_datetime=$(date -u '+%Y-%m-%d %H:%M:%S')
+            
+            # Tạo file markdown với header
+            {
+              echo "# Kết quả tạo tài khoản và khóa"
+              echo ""
+              echo "_Generated at: $current_datetime UTC_"
+              echo ""
+              echo "_OS: $CURRENT_OS_"
+              echo ""
+              echo "| Key | Username | Password | Expires Date |"
+              echo "|-----|----------|----------|--------------|"
+            } > "$results_file"
+            
+            # Parse output và thêm vào markdown
+            local key="" email="" password="" expires=""
+            while IFS= read -r line; do
+              if [[ $line == *"License Key:"* ]]; then
+                key=$(echo "$line" | awk '{print $NF}')
+              elif [[ $line == *"Account Email:"* ]]; then
+                email=$(echo "$line" | awk '{print $NF}')
+              elif [[ $line == *"Account Password:"* ]]; then
+                password=$(echo "$line" | sed 's/Account Password: //')
+              elif [[ $line == *"License Out Date:"* ]]; then
+                # Convert dd.MM.yyyy to yyyy-MM-dd
+                expires=$(echo "$line" | awk '{print $NF}' | awk -F. '{print $3"-"$2"-"$1}')
+                if [[ -n $key && -n $email && -n $password && -n $expires ]]; then
+                  echo "| $key | $email | $password | $expires |" >> "$results_file"
+                  key="" email="" password="" expires=""
+                fi
+              fi
+            done < "$output_file"
           }
 
           # Thử từng tổ hợp cho đến khi thành công
@@ -180,14 +147,14 @@ jobs:
                 echo "=== Thử tổ hợp: OS=$CURRENT_OS, Mail=$MAIL, Key Type=$KEY_TYPE ==="
                 
                 # Xóa file kết quả cũ
-                rm -f *KEYS.txt *ACCOUNTS.txt
-                
+                rm -f output.log *KEYS.txt *ACCOUNTS.txt
+
                 # Chạy tạo account nếu cần
                 if [[ "$ACCOUNT" != "0" ]]; then
                   echo "Tạo $ACCOUNT tài khoản với $MAIL..."
                   run_with_timeout python3 main.py --auto-detect-browser --account --email-api "$MAIL" \
                     --skip-update-check --no-logo --disable-progress-bar --disable-logging \
-                    --repeat "$ACCOUNT"
+                    --repeat "$ACCOUNT" | tee -a output.log
                 fi
                 
                 # Chạy tạo key nếu cần
@@ -195,11 +162,13 @@ jobs:
                   echo "Tạo $KEY khóa với $MAIL và $KEY_TYPE..."
                   run_with_timeout python3 main.py --auto-detect-browser "$KEY_TYPE" --email-api "$MAIL" \
                     --skip-update-check --no-logo --disable-progress-bar --disable-logging \
-                    --repeat "$KEY"
+                    --repeat "$KEY" | tee -a output.log
 
-                  # Kiểm tra kết quả
-                  if check_success; then
+                  # Kiểm tra kết quả trong output log
+                  if grep -q "License Key:" output.log; then
                     echo "✅ Tạo khóa thành công với OS=$CURRENT_OS!"
+                    # Parse output và tạo file markdown
+                    parse_and_create_markdown output.log
                     SUCCESS=1
                     break 3  # Thoát khỏi cả 3 vòng lặp
                   else
@@ -219,10 +188,6 @@ jobs:
             echo "❌ Đã thử tất cả tổ hợp nhưng không thành công!"
             exit 1
           fi
-
-          cd ..
-          # Format kết quả
-          python3 format_results.py
 
       - name: Cập nhật và đẩy kết quả
         if: success()
