@@ -105,6 +105,7 @@ jobs:
               local temp_email=""
               local temp_password=""
               local temp_expires=""
+              local temp_license_name="" # Biến mới để lưu License Name
 
               # Đọc nhật ký đầu ra từng dòng để trích xuất tất cả chi tiết key/tài khoản
               while IFS= read -r line; do
@@ -112,19 +113,22 @@ jobs:
                       temp_email=$(echo "$line" | awk '{print $NF}')
                   elif [[ $line == *"Account Password:"* ]]; then
                       temp_password=$(echo "$line" | sed 's/Account Password: //')
+                  elif [[ $line == *"License Name:"* ]]; then # Bắt License Name
+                      temp_license_name=$(echo "$line" | sed 's/License Name: //')
                   elif [[ $line == *"License Key:"* ]]; then
                       temp_key=$(echo "$line" | awk '{print $NF}')
                   elif [[ $line == *"License Out Date:"* ]]; then
                       temp_expires=$(echo "$line" | awk '{print $NF}' | awk -F. '{print $3"-"$2"-"$1}')
                       
                       # Khi tìm thấy License Out Date, nếu tất cả các phần tử đều có, thêm vào new_entries
-                      if [[ -n "$temp_key" && -n "$temp_email" && -n "$temp_password" && -n "$temp_expires" ]]; then
-                          new_entries+=("| $temp_key | $temp_email | $temp_password | $temp_expires |")
+                      if [[ -n "$temp_key" && -n "$temp_email" && -n "$temp_password" && -n "$temp_expires" && -n "$temp_license_name" ]]; then
+                          new_entries+=("| $temp_key | $temp_email | $temp_password | $temp_expires | $temp_license_name |") # Thêm License Name vào hàng
                           # Reset temp variables for the next block
                           temp_key=""
                           temp_email=""
                           temp_password=""
                           temp_expires=""
+                          temp_license_name=""
                       fi
                   fi
               done < "$output_file"
@@ -172,8 +176,8 @@ jobs:
                   echo "_Generated at: $current_datetime UTC_"
                   echo "_OS của trình chạy: $(uname -s)_" # Hiển thị hệ điều hành của GitHub Actions runner
                   echo ""
-                  echo "| Key | Username | Password | Expires Date |"
-                  echo "|-----|----------|----------|--------------|"
+                  echo "| Key | Username | Password | Expires Date | License Name |" # Thêm cột License Name vào tiêu đề bảng
+                  echo "|-----|----------|----------|--------------|--------------|" # Cập nhật dấu phân cách bảng
 
                   for entry in "${final_entries[@]}"; do
                       echo "$entry"
@@ -214,7 +218,8 @@ jobs:
                   if grep -q "License Key:" output.log && \
                      grep -q "Account Email:" output.log && \
                      grep -q "Account Password:" output.log && \
-                     grep -q "License Out Date:" output.log; then
+                     grep -q "License Out Date:" output.log && \
+                     grep -q "License Name:" output.log; then # Thêm kiểm tra License Name
                     echo "✅ Tạo khóa thành công với OS=$CURRENT_OS!"
                     # Phân tích đầu ra và cập nhật file markdown với kết quả mới
                     update_markdown_results output.log
