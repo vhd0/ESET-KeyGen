@@ -101,36 +101,33 @@ jobs:
               local current_datetime=$(date -u '+%Y-%m-%d %H:%M:%S')
               local new_entries=() # Mảng để lưu trữ các hàng mới được định dạng
 
-              local current_block_key=""
-              local current_block_email=""
-              local current_block_password=""
-              local current_block_expires=""
+              local temp_key=""
+              local temp_email=""
+              local temp_password=""
+              local temp_expires=""
 
               # Đọc nhật ký đầu ra từng dòng để trích xuất tất cả chi tiết key/tài khoản
               while IFS= read -r line; do
-                  if [[ $line == *"License Key:"* ]]; then
-                      # Nếu có một block hoàn chỉnh trước đó, thêm nó vào danh sách trước khi bắt đầu block mới
-                      if [[ -n $current_block_key && -n $current_block_email && -n $current_block_password && -n $current_block_expires ]]; then
-                          new_entries+=("| $current_block_key | $current_block_email | $current_block_password | $current_block_expires |")
-                      fi
-                      # Bắt đầu block mới
-                      current_block_key=$(echo "$line" | awk '{print $NF}')
-                      current_block_email="" # Đặt lại cho block mới
-                      current_block_password="" # Đặt lại cho block mới
-                      current_block_expires="" # Đặt lại cho block mới
-                  elif [[ $line == *"Account Email:"* ]]; then
-                      current_block_email=$(echo "$line" | awk '{print $NF}')
+                  if [[ $line == *"Account Email:"* ]]; then
+                      temp_email=$(echo "$line" | awk '{print $NF}')
                   elif [[ $line == *"Account Password:"* ]]; then
-                      current_block_password=$(echo "$line" | sed 's/Account Password: //') # Sử dụng sed để lấy phần sau "Account Password: "
+                      temp_password=$(echo "$line" | sed 's/Account Password: //')
+                  elif [[ $line == *"License Key:"* ]]; then
+                      temp_key=$(echo "$line" | awk '{print $NF}')
                   elif [[ $line == *"License Out Date:"* ]]; then
-                      current_block_expires=$(echo "$line" | awk '{print $NF}' | awk -F. '{print $3"-"$2"-"$1}') # Chuyển đổi định dạng ngày
+                      temp_expires=$(echo "$line" | awk '{print $NF}' | awk -F. '{print $3"-"$2"-"$1}')
+                      
+                      # Khi tìm thấy License Out Date, nếu tất cả các phần tử đều có, thêm vào new_entries
+                      if [[ -n "$temp_key" && -n "$temp_email" && -n "$temp_password" && -n "$temp_expires" ]]; then
+                          new_entries+=("| $temp_key | $temp_email | $temp_password | $temp_expires |")
+                          # Reset temp variables for the next block
+                          temp_key=""
+                          temp_email=""
+                          temp_password=""
+                          temp_expires=""
+                      fi
                   fi
               done < "$output_file"
-
-              # Thêm block cuối cùng nếu nó hoàn chỉnh
-              if [[ -n $current_block_key && -n $current_block_email && -n $current_block_password && -n $current_block_expires ]]; then
-                  new_entries+=("| $current_block_key | $current_block_email | $current_block_password | $current_block_expires |")
-              fi
 
               if [ ${#new_entries[@]} -eq 0 ]; then
                   echo "Cảnh báo: Không tìm thấy bất kỳ cặp Key/Account hợp lệ nào trong output.log. Bỏ qua việc cập nhật bảng."
