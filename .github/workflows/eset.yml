@@ -105,25 +105,32 @@ jobs:
               local temp_email=""
               local temp_password=""
               local temp_expires=""
-              local temp_license_name="" # Biến mới để lưu License Name
+              local temp_license_name=""
 
               # Đọc nhật ký đầu ra từng dòng để trích xuất tất cả chi tiết key/tài khoản
               while IFS= read -r line; do
-                  if [[ $line == *"Account Email:"* ]]; then
-                      temp_email=$(echo "$line" | awk '{print $NF}')
-                  elif [[ $line == *"Account Password:"* ]]; then
-                      temp_password=$(echo "$line" | sed 's/Account Password: //')
-                  elif [[ $line == *"License Name:"* ]]; then # Bắt License Name
-                      temp_license_name=$(echo "$line" | sed 's/License Name: //')
-                  elif [[ $line == *"License Key:"* ]]; then
-                      temp_key=$(echo "$line" | awk '{print $NF}')
-                  elif [[ $line == *"License Out Date:"* ]]; then
-                      temp_expires=$(echo "$line" | awk '{print $NF}' | awk -F. '{print $3"-"$2"-"$1}')
+                  if [[ "$line" == *"Account Email:"* ]]; then
+                      # Trích xuất giá trị sau "Account Email: " và loại bỏ khoảng trắng thừa
+                      temp_email=$(echo "$line" | sed 's/^Account Email: *//' | xargs)
+                  elif [[ "$line" == *"Account Password:"* ]]; then
+                      # Trích xuất giá trị sau "Account Password: " và loại bỏ khoảng trắng thừa
+                      temp_password=$(echo "$line" | sed 's/^Account Password: *//' | xargs)
+                  elif [[ "$line" == *"License Name:"* ]]; then
+                      # Trích xuất giá trị sau "License Name: " và loại bỏ khoảng trắng thừa
+                      temp_license_name=$(echo "$line" | sed 's/^License Name: *//' | xargs)
+                  elif [[ "$line" == *"License Key:"* ]]; then
+                      # Trích xuất giá trị sau "License Key: " và loại bỏ khoảng trắng thừa
+                      temp_key=$(echo "$line" | sed 's/^License Key: *//' | xargs)
+                  elif [[ "$line" == *"License Out Date:"* ]]; then
+                      # Trích xuất giá trị sau "License Out Date: ", định dạng lại ngày và loại bỏ khoảng trắng thừa
+                      temp_expires=$(echo "$line" | sed 's/^License Out Date: *//' | awk -F. '{print $3"-"$2"-"$1}' | xargs)
                       
-                      # Khi tìm thấy License Out Date, nếu tất cả các phần tử đều có, thêm vào new_entries
+                      # Khi tìm thấy License Out Date và tất cả các phần tử đều có giá trị, thêm vào new_entries
                       if [[ -n "$temp_key" && -n "$temp_email" && -n "$temp_password" && -n "$temp_expires" && -n "$temp_license_name" ]]; then
-                          new_entries+=("| $temp_key | $temp_email | $temp_password | $temp_expires | $temp_license_name |") # Thêm License Name vào hàng
-                          # Reset temp variables for the next block
+                          # Thoát (escape) ký tự '|' trong mật khẩu để nó không bị hiểu là phân cách cột trong Markdown
+                          escaped_password=$(echo "$temp_password" | sed 's/|/\\|/g')
+                          new_entries+=("| $temp_key | $temp_email | $escaped_password | $temp_expires | $temp_license_name |")
+                          # Đặt lại các biến tạm thời cho block tiếp theo
                           temp_key=""
                           temp_email=""
                           temp_password=""
@@ -138,47 +145,48 @@ jobs:
                   return 1
               fi
 
-              # Đọc nội dung hiện có (loại bỏ phần tiêu đề và dấu phân cách)
+              # Đọc nội dung hiện có của file Markdown (loại bỏ phần tiêu đề và dấu phân cách của bảng)
               local existing_table_rows=()
               if [ -f "$results_file" ]; then
                   local found_separator=0
                   while IFS= read -r line; do
                       if [ $found_separator -eq 1 ]; then
-                          # Đã qua dòng phân cách, đây là các hàng của bảng
-                          local trimmed_line=$(echo "$line" | xargs) # Loại bỏ khoảng trắng thừa
+                          # Đây là các hàng của bảng, loại bỏ khoảng trắng thừa
+                          local trimmed_line=$(echo "$line" | xargs)
                           if [[ -n "$trimmed_line" ]]; then
                               existing_table_rows+=("$trimmed_line")
                           fi
-                      elif [[ "$line" == "|-----|----------|----------|--------------|" ]]; then
-                          # Đây là dòng phân cách của bảng
+                      elif [[ "$line" == "|-----|----------|----------|--------------|--------------|" ]]; then
+                          # Đã tìm thấy dòng phân cách của bảng
                           found_separator=1
                       fi
                   done < "$results_file"
               fi
 
-              # Kết hợp các mục mới và hiện có. Các mục mới được thêm vào đầu (mới nhất ở trên).
+              # Kết hợp các mục mới và hiện có, các mục mới nhất sẽ ở đầu
               local temp_combined_entries=("${new_entries[@]}")
               for row in "${existing_table_rows[@]}"; do
                   temp_combined_entries+=("$row")
               done
               
-              # Giới hạn chỉ 30 mục gần nhất (các mục mới đã được thêm vào đầu)
+              # Giới hạn số lượng mục nhập chỉ còn 30 gần nhất
               local max_entries=30
               local final_entries=()
               for (( i=0; i<${#temp_combined_entries[@]} && i<max_entries; i++ )); do
                   final_entries+=("${temp_combined_entries[i]}")
               done
 
-              # Xây dựng lại file markdown
+              # Xây dựng lại file Markdown hoàn chỉnh
               {
                   echo "# Kết quả tạo tài khoản và khóa"
                   echo ""
                   echo "_Generated at: $current_datetime UTC_"
-                  echo "_OS của trình chạy: $(uname -s)_" # Hiển thị hệ điều hành của GitHub Actions runner
+                  echo "_OS của trình chạy: $(uname -s)_"
                   echo ""
-                  echo "| Key | Username | Password | Expires Date | License Name |" # Thêm cột License Name vào tiêu đề bảng
-                  echo "|-----|----------|----------|--------------|--------------|" # Cập nhật dấu phân cách bảng
+                  echo "| Key | Username | Password | Expires Date | License Name |" # Tiêu đề bảng
+                  echo "|-----|----------|----------|--------------|--------------|" # Dòng phân cách bảng
 
+                  # In các hàng dữ liệu đã được lọc và sắp xếp
                   for entry in "${final_entries[@]}"; do
                       echo "$entry"
                   done
@@ -189,14 +197,14 @@ jobs:
 
           # Thử từng tổ hợp cho đến khi thành công
           for CURRENT_OS in "${SHUFFLED_OS[@]}"; do
-            export CURRENT_OS # Xuất biến này để nó có thể được sử dụng trong hàm update_markdown_results
+            export CURRENT_OS
             echo "=== Thử với OS: $CURRENT_OS ==="
             
             for MAIL in "${SHUFFLED_MAILS[@]}"; do
               for KEY_TYPE in "${SHUFFLED_KEYS[@]}"; do
                 echo "=== Thử tổ hợp: OS=$CURRENT_OS, Mail=$MAIL, Key Type=$KEY_TYPE ==="
                 
-                # Xóa các file kết quả cũ từ lần chạy trước đó để đảm bảo sạch sẽ
+                # Xóa các file kết quả cũ để đảm bảo sạch sẽ
                 rm -f output.log *KEYS.txt *ACCOUNTS.txt
 
                 # Chạy tạo tài khoản nếu cần
@@ -214,12 +222,12 @@ jobs:
                     --skip-update-check --no-logo --disable-progress-bar --disable-logging \
                     --repeat "$KEY" | tee -a output.log
 
-                  # Kiểm tra kết quả trong nhật ký đầu ra để đảm bảo tất cả các trường cần thiết đều có
+                  # Kiểm tra kết quả để đảm bảo tất cả các trường cần thiết đều có
                   if grep -q "License Key:" output.log && \
                      grep -q "Account Email:" output.log && \
                      grep -q "Account Password:" output.log && \
                      grep -q "License Out Date:" output.log && \
-                     grep -q "License Name:" output.log; then # Thêm kiểm tra License Name
+                     grep -q "License Name:" output.log; then
                     echo "✅ Tạo khóa thành công với OS=$CURRENT_OS!"
                     # Phân tích đầu ra và cập nhật file markdown với kết quả mới
                     update_markdown_results output.log
@@ -229,7 +237,7 @@ jobs:
                     echo "❌ Không thể tạo khóa với tổ hợp này hoặc thông tin bị thiếu, thử tổ hợp tiếp theo..."
                   fi
                 else
-                  # Nếu không cần tạo key (KEY=0), chỉ tạo tài khoản, và coi là thành công nếu ACCOUNT khác 0
+                  # Nếu không cần tạo key, chỉ tạo tài khoản và coi là thành công
                   if [[ "$ACCOUNT" != "0" ]]; then
                     echo "Chỉ tạo tài khoản, không tạo khóa. Coi là thành công."
                     SUCCESS=1
@@ -247,23 +255,22 @@ jobs:
           fi
 
       - name: Cập nhật và đẩy kết quả
-        if: success() # Chỉ chạy bước này nếu các bước trước đó thành công
+        if: success()
         shell: bash
         run: |
           # Cấu hình thông tin người dùng cho git commit
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Kiểm tra xem file markdown có tồn tại không
+          # Kiểm tra xem file markdown có tồn tại không và có thay đổi để commit/push không
           if [ -f "generated_results.md" ]; then
-            git add generated_results.md # Thêm file markdown vào staging area
-            # Kiểm tra xem có sự khác biệt nào để commit không
+            git add generated_results.md
             if ! git diff --cached --quiet; then
-              git commit -m "Cập nhật kết quả từ $CURRENT_OS [skip ci]" # Commit thay đổi, thêm [skip ci] để tránh trigger workflow lặp lại
-              git push origin HEAD:${{ github.event.inputs.branch || 'main' }} # Đẩy thay đổi lên nhánh
+              git commit -m "Cập nhật kết quả từ $CURRENT_OS [skip ci]"
+              git push origin HEAD:${{ github.event.inputs.branch || 'main' }}
             else
               echo "Không có thay đổi để commit/push."
             fi
           fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Sử dụng GitHub token để xác thực
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
