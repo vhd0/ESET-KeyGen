@@ -221,7 +221,7 @@ jobs:
                   echo "Tạo $ACCOUNT tài khoản với $MAIL..."
                   run_with_timeout python3 main.py --auto-detect-browser --account --email-api "$MAIL" \
                     --skip-update-check --no-logo --disable-progress-bar --disable-logging \
-                    --repeat "$ACCOUNT" | tee -a output.log
+                    --repeat "$ACCOUNT" | tee -a output.log # Đã sửa output.aog thành output.log
                 fi
                 
                 # Chạy tạo key nếu cần
@@ -229,7 +229,7 @@ jobs:
                   echo "Tạo $KEY khóa với $MAIL và $KEY_TYPE..."
                   run_with_timeout python3 main.py --auto-detect-browser "$KEY_TYPE" --email-api "$MAIL" \
                     --skip-update-check --no-logo --disable-progress-bar --disable-logging \
-                    --repeat "$KEY" | tee -a output.aog
+                    --repeat "$KEY" | tee -a output.log # Đã sửa output.aog thành output.log
 
                   # Kiểm tra kết quả để đảm bảo tất cả các trường cần thiết đều có
                   if grep -q "License Key:" output.log && \
