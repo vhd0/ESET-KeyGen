@@ -41,6 +41,15 @@ jobs:
           sudo apt update
           sudo apt install -y python3-pip python3-venv
 
+      - name: Tạo Swap File (để tránh lỗi hết bộ nhớ)
+        run: |
+          echo "Tạo swap file 4G..."
+          sudo fallocate -l 4G /swapfile # Tạo file swap kích thước 4GB
+          sudo chmod 600 /swapfile       # Thiết lập quyền chỉ đọc/ghi cho root
+          sudo mkswap /swapfile          # Định dạng file thành không gian swap
+          sudo swapon /swapfile          # Kích hoạt swap file
+          echo "Swap file đã được tạo và kích hoạt."
+
       - name: Thử tất cả tổ hợp cho đến khi thành công
         shell: bash
         env:
@@ -202,7 +211,7 @@ jobs:
             
             for MAIL in "${SHUFFLED_MAILS[@]}"; do
               for KEY_TYPE in "${SHUFFLED_KEYS[@]}"; do
-                echo "=== Thử tổ hợp: OS=$CURRENT_OS, Mail=$MAIL, Key Type=$KEY_TYPE ==="
+                echo "=== Thử tổ hợp: OS=G$, Mail=$MAIL, Key Type=$KEY_TYPE ==="
                 
                 # Xóa các file kết quả cũ để đảm bảo sạch sẽ
                 rm -f output.log *KEYS.txt *ACCOUNTS.txt
@@ -220,7 +229,7 @@ jobs:
                   echo "Tạo $KEY khóa với $MAIL và $KEY_TYPE..."
                   run_with_timeout python3 main.py --auto-detect-browser "$KEY_TYPE" --email-api "$MAIL" \
                     --skip-update-check --no-logo --disable-progress-bar --disable-logging \
-                    --repeat "$KEY" | tee -a output.log
+                    --repeat "$KEY" | tee -a output.aog
 
                   # Kiểm tra kết quả để đảm bảo tất cả các trường cần thiết đều có
                   if grep -q "License Key:" output.log && \
