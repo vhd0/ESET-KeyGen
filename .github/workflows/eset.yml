@@ -1,4 +1,4 @@
-name: Automated Account and Key Generator
+name: ESET KeyGen Workflow
 
 on:
   push:
@@ -22,8 +22,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # Nếu có requirements.txt thì bỏ comment dòng dưới
-          # pip install -r requirements.txt
+          pip install selenium
 
       - name: Run main.py to generate output.log
         run: |
