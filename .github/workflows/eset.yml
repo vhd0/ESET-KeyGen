@@ -2,7 +2,7 @@ name: Automated Account and Key Generator
 
 on:
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 0 * * *" # Chạy tự động vào lúc 00:00 UTC mỗi ngày
   workflow_dispatch:
     inputs:
       account:
@@ -16,7 +16,7 @@ on:
         default: '1'
         type: string
       branch:
-        description: "Nhánh kho lưu trữ"
+        description: "Nhánh kho lưu trữ (không chạm vào nếu bạn không biết gì về nó!!!)"
         required: false
         type: choice
         options:
@@ -42,7 +42,7 @@ jobs:
           sudo apt update
           sudo apt install -y python3-pip python3-venv
 
-      - name: Tạo Swap File (để tránh lỗi hết bộ nhớ)
+      - name: Tạo Swap File
         run: |
           sudo fallocate -l 4G /swapfile
           sudo chmod 600 /swapfile
@@ -57,7 +57,6 @@ jobs:
         run: |
           git clone -b ${{ github.event.inputs.branch || 'main' }} https://github.com/rzc0d3r/ESET-KeyGen.git
           cd ESET-KeyGen
-          
           python3 -m venv venv
           source venv/bin/activate
           pip install -r requirements.txt
@@ -71,6 +70,7 @@ jobs:
           SHUFFLED_OS=($(printf "%s\n" "${OS_LIST[@]}" | shuf))
 
           SUCCESS=0
+          echo "Bắt đầu thử các tổ hợp ngẫu nhiên..."
 
           run_with_timeout() {
             local timeout_duration=90
@@ -92,7 +92,6 @@ jobs:
           for CURRENT_OS in "${SHUFFLED_OS[@]}"; do
             export CURRENT_OS
             echo "=== Thử với OS: $CURRENT_OS ==="
-
             for MAIL in "${SHUFFLED_MAILS[@]}"; do
               for KEY_TYPE in "${SHUFFLED_KEYS[@]}"; do
                 echo "=== Thử tổ hợp: OS=$CURRENT_OS, Mail=$MAIL, Key Type=$KEY_TYPE ==="
@@ -100,33 +99,33 @@ jobs:
                 rm -f output.log *KEYS.txt *ACCOUNTS.txt
 
                 if [[ "$ACCOUNT" != "0" ]]; then
+                  echo "Tạo $ACCOUNT tài khoản với $MAIL..."
                   run_with_timeout python3 main.py --auto-detect-browser --account --email-api "$MAIL" \
                     --skip-update-check --no-logo --disable-progress-bar --disable-logging \
                     --repeat "$ACCOUNT" | tee -a output.log
                 fi
 
                 if [[ "$KEY" != "0" ]]; then
+                  echo "Tạo $KEY khóa với $MAIL và $KEY_TYPE..."
                   run_with_timeout python3 main.py --auto-detect-browser "$KEY_TYPE" --email-api "$MAIL" \
                     --skip-update-check --no-logo --disable-progress-bar --disable-logging \
                     --repeat "$KEY" | tee -a output.log
 
                   if grep -q "License Key:" output.log && \
-                      grep -q "Account Email:" output.log && \
-                      grep -q "Account Password:" output.log && \
-                      grep -q "License Out Date:" output.log && \
-                      grep -q "License Name:" output.log; then
+                     grep -q "Account Email:" output.log && \
+                     grep -q "Account Password:" output.log && \
+                     grep -q "License Out Date:" output.log && \
+                     grep -q "License Name:" output.log; then
                     echo "✅ Tạo khóa thành công với OS=$CURRENT_OS!"
                     SUCCESS=1
                     break 3
                   else
-                    echo "❌ Không thể tạo khóa với tổ hợp này, thử tổ hợp tiếp theo..."
+                    echo "❌ Không thành công, thử tổ hợp khác..."
                   fi
-                else
-                  if [[ "$ACCOUNT" != "0" ]]; then
-                    echo "Chỉ tạo tài khoản, không tạo khóa. Coi là thành công."
-                    SUCCESS=1
-                    break 3
-                  fi
+                elif [[ "$ACCOUNT" != "0" ]]; then
+                  echo "Chỉ tạo tài khoản, coi như thành công."
+                  SUCCESS=1
+                  break 3
                 fi
               done
             done
@@ -141,11 +140,7 @@ jobs:
         if: success()
         shell: bash
         run: |
-          if [ -f "ESET-KeyGen/output.log" ]; then
-            python3 update_markdown.py ESET-KeyGen/output.log
-          else
-            echo "⚠️ output.log không tồn tại, bỏ qua cập nhật markdown."
-          fi
+          python3 update_markdown.py ESET-KeyGen/output.log
 
       - name: Cập nhật và đẩy kết quả
         if: success()
@@ -157,7 +152,7 @@ jobs:
           if [ -f "generated_results.md" ]; then
             git add generated_results.md
             if ! git diff --cached --quiet; then
-              git commit -m "Cập nhật kết quả từ ${{ env.CURRENT_OS || 'unknown' }} [skip ci]"
+              git commit -m "Cập nhật kết quả từ ${{ env.CURRENT_OS }} [skip ci]"
               git push origin HEAD:${{ github.event.inputs.branch || 'main' }}
             else
               echo "Không có thay đổi để commit/push."
