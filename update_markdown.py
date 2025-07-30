@@ -7,13 +7,13 @@ def parse_output_content(content): # Hàm này nhận nội dung trực tiếp
     Parses the output content string to extract key information.
     """
     # Regex để bắt các thông tin cần thiết, đã điều chỉnh cho định dạng log
-    # Nó khớp với thứ tự quan sát và bỏ qua các số dòng một cách rõ ràng
+    # Nó khớp với thứ tự quan sát và linh hoạt hơn với khoảng trắng và dòng số
     pattern = re.compile(
-        r"Account Email:\s*(?P<account_email>[^\n]+)\n\d+\n"
-        r"Account Password:\s*(?P<account_password>[^\n]+)\n\d+\n"
-        r"License Name:\s*(?P<license_name>[^\n]+)\n\d+\n"
-        r"License Key:\s*(?P<license_key>[^\n]+)\n\d+\n"
-        r"License Out Date:\s*(?P<license_out_date>[^\n]+)\n\d+",
+        r"Account Email:\s*(?P<account_email>[^\n]+)\s*\n\s*\d+\s*\n"
+        r"Account Password:\s*(?P<account_password>[^\n]+)\s*\n\s*\d+\s*\n"
+        r"License Name:\s*(?P<license_name>[^\n]+)\s*\n\s*\d+\s*\n"
+        r"License Key:\s*(?P<license_key>[^\n]+)\s*\n\s*\d+\s*\n"
+        r"License Out Date:\s*(?P<license_out_date>[^\n]+)\s*\n\s*\d+", # Không có \n cuối cùng vì có thể theo sau bởi dòng ---
         re.DOTALL
     )
 
