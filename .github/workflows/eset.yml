@@ -103,116 +103,14 @@ jobs:
             return 124 # Mã lỗi cho timeout
           }
 
-          # Function để phân tích kết quả và cập nhật file markdown
-          update_markdown_results() {
-              local output_file="$1"
-              local results_file="../generated_results.md"
-              local current_datetime=$(date -u '+%Y-%m-%d %H:%M:%S')
-              local new_entries=() # Mảng để lưu trữ các hàng mới được định dạng
-
-              local temp_key=""
-              local temp_email=""
-              local temp_password=""
-              local temp_expires=""
-              local temp_license_name=""
-
-              # Đọc nhật ký đầu ra từng dòng để trích xuất tất cả chi tiết key/tài khoản
-              while IFS= read -r line; do
-                  if [[ "$line" == *"Account Email:"* ]]; then
-                      # Trích xuất giá trị sau "Account Email: " và loại bỏ khoảng trắng thừa
-                      temp_email=$(echo "$line" | sed -E 's/^Account Email: *(.*)/\1/' | sed 's/[[:space:]]*$//')
-                  elif [[ "$line" == *"Account Password:"* ]]; then
-                      # Trích xuất giá trị sau "Account Password: " và loại bỏ khoảng trắng thừa
-                      temp_password=$(echo "$line" | sed -E 's/^Account Password: *(.*)/\1/' | sed 's/[[:space:]]*$//')
-                  elif [[ "$line" == *"License Name:"* ]]; then
-                      # Trích xuất giá trị sau "License Name: " và loại bỏ khoảng trắng thừa
-                      temp_license_name=$(echo "$line" | sed -E 's/^License Name: *(.*)/\1/' | sed 's/[[:space:]]*$//')
-                  elif [[ "$line" == *"License Key:"* ]]; then
-                      # Trích xuất giá trị sau "License Key: " và loại bỏ khoảng trắng thừa
-                      temp_key=$(echo "$line" | sed -E 's/^License Key: *(.*)/\1/' | sed 's/[[:space:]]*$//')
-                  elif [[ "$line" == *"License Out Date:"* ]]; then
-                      # Trích xuất giá trị sau "License Out Date: ", định dạng lại ngày và loại bỏ khoảng trắng thừa
-                      # Sửa đổi để xử lý cả định dạng dd.MM.yyyy và dd/MM/yyyy
-                      temp_expires=$(echo "$line" | sed -E 's/^License Out Date: *(.*)/\1/' | sed 's/[[:space:]]*$//' | sed -E 's#([0-9]{2})[./]([0-9]{2})[./]([0-9]{4})#\3-\2-\1#g')
-                      
-                      # Khi tìm thấy License Out Date và tất cả các phần tử đều có giá trị, thêm vào new_entries
-                      if [[ -n "$temp_key" && -n "$temp_email" && -n "$temp_password" && -n "$temp_expires" && -n "$temp_license_name" ]]; then
-                          # Thoát (escape) ký tự '|' trong mật khẩu để nó không bị hiểu là phân cách cột trong Markdown
-                          escaped_password=$(echo "$temp_password" | sed 's/|/\\|/g')
-                          new_entries+=("| $temp_key | $temp_email | $escaped_password | $temp_expires | $temp_license_name |")
-                          # Đặt lại các biến tạm thời cho block tiếp theo
-                          temp_key=""
-                          temp_email=""
-                          temp_password=""
-                          temp_expires=""
-                          temp_license_name=""
-                      fi
-                  fi
-              done < "$output_file"
-
-              if [ ${#new_entries[@]} -eq 0 ]; then
-                  echo "Cảnh báo: Không tìm thấy bất kỳ cặp Key/Account hợp lệ nào trong output.log. Bỏ qua việc cập nhật bảng."
-                  return 1
-              fi
-
-              # Đọc nội dung hiện có của file Markdown (loại bỏ phần tiêu đề và dấu phân cách của bảng)
-              local existing_table_rows=()
-              if [ -f "$results_file" ]; then
-                  local found_separator=0
-                  while IFS= read -r line; do
-                      if [ $found_separator -eq 1 ]; then
-                          # Đây là các hàng của bảng, loại bỏ khoảng trắng thừa
-                          local trimmed_line=$(echo "$line" | xargs)
-                          if [[ -n "$trimmed_line" ]]; then
-                              existing_table_rows+=("$trimmed_line")
-                          fi
-                      elif [[ "$line" == "|-----|----------|----------|--------------|--------------|" ]]; then
-                          # Đã tìm thấy dòng phân cách của bảng
-                          found_separator=1
-                      fi
-                  done < "$results_file"
-              fi
-
-              # Kết hợp các mục mới và hiện có, các mục mới nhất sẽ ở đầu
-              local temp_combined_entries=("${new_entries[@]}")
-              for row in "${existing_table_rows[@]}"; do
-                  temp_combined_entries+=("$row")
-              done
-              
-              # Giới hạn số lượng mục nhập chỉ còn 30 gần nhất
-              local max_entries=30
-              local final_entries=()
-              for (( i=0; i<${#temp_combined_entries[@]} && i<max_entries; i++ )); do
-                  final_entries+=("${temp_combined_entries[i]}")
-              done
-
-              # Xây dựng lại file Markdown hoàn chỉnh
-              {
-                  echo "# Kết quả tạo tài khoản và khóa"
-                  echo ""
-                  echo "_Generated at: $current_datetime UTC_"
-                  echo "_OS của trình chạy: $(uname -s)_"
-                  echo ""
-                  echo "| Key | Username | Password | Expires Date | License Name |" # Tiêu đề bảng
-                  echo "|-----|----------|----------|--------------|--------------|" # Dòng phân cách bảng
-
-                  # In các hàng dữ liệu đã được lọc và sắp xếp
-                  for entry in "${final_entries[@]}"; do
-                      echo "$entry"
-                  done
-              } > "$results_file"
-
-              echo "Cập nhật $results_file thành công."
-          }
-
           # Thử từng tổ hợp cho đến khi thành công
           for CURRENT_OS in "${SHUFFLED_OS[@]}"; do
-            export CURRENT_OS
+            export CURRENT_OS # Xuất biến này để có thể sử dụng trong các bước sau
             echo "=== Thử với OS: $CURRENT_OS ==="
             
             for MAIL in "${SHUFFLED_MAILS[@]}"; do
               for KEY_TYPE in "${SHUFFLED_KEYS[@]}"; do
-                echo "=== Thử tổ hợp: OS=G$, Mail=$MAIL, Key Type=$KEY_TYPE ==="
+                echo "=== Thử tổ hợp: OS=$CURRENT_OS, Mail=$MAIL, Key Type=$KEY_TYPE ==="
                 
                 # Xóa các file kết quả cũ để đảm bảo sạch sẽ
                 rm -f output.log *KEYS.txt *ACCOUNTS.txt
@@ -239,8 +137,6 @@ jobs:
                      grep -q "License Out Date:" output.log && \
                      grep -q "License Name:" output.log; then
                     echo "✅ Tạo khóa thành công với OS=$CURRENT_OS!"
-                    # Phân tích đầu ra và cập nhật file markdown với kết quả mới
-                    update_markdown_results output.log
                     SUCCESS=1
                     break 3  # Thoát khỏi tất cả các vòng lặp nếu thành công
                   else
@@ -264,8 +160,16 @@ jobs:
             exit 1 # Kết thúc workflow với lỗi
           fi
 
+      - name: Cập nhật bảng Markdown với Python
+        if: success() # Chỉ chạy bước này nếu các bước trước đó thành công
+        shell: bash
+        run: |
+          # Chạy script Python để phân tích output.log và cập nhật generated_results.md
+          python3 update_markdown.py output.log
+        working-directory: ESET-KeyGen # Đảm bảo chạy script từ thư mục ESET-KeyGen
+
       - name: Cập nhật và đẩy kết quả
-        if: success()
+        if: success() # Chỉ chạy bước này nếu các bước trước đó thành công
         shell: bash
         run: |
           # Cấu hình thông tin người dùng cho git commit
@@ -276,11 +180,12 @@ jobs:
           if [ -f "generated_results.md" ]; then
             git add generated_results.md
             if ! git diff --cached --quiet; then
-              git commit -m "Cập nhật kết quả từ $CURRENT_OS [skip ci]"
+              # Sử dụng env.CURRENT_OS vì biến này đã được export trong bước trước
+              git commit -m "Cập nhật kết quả từ ${{ env.CURRENT_OS }} [skip ci]"
               git push origin HEAD:${{ github.event.inputs.branch || 'main' }}
             else
               echo "Không có thay đổi để commit/push."
             fi
           fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Sử dụng GitHub token để xác thực
