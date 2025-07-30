@@ -22,13 +22,13 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          # Nếu bạn có requirements.txt thì dùng lệnh sau, hoặc bỏ qua nếu không cần:
+          # Nếu có requirements.txt thì bỏ comment dòng dưới
           # pip install -r requirements.txt
 
       - name: Run main.py to generate output.log
         run: |
           python3 main.py > output.log
-          
+
       - name: Run update_markdown.py to update markdown from output.log
         run: |
           python3 update_markdown.py output.log
@@ -41,9 +41,4 @@ jobs:
           git diff --cached --quiet || git commit -m "Update generated_results.md from workflow"
           git push
         env:
-          # Token để push, nếu bạn dùng token khác thì thay thế
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-          else
-            echo "❗ Không tìm thấy tệp generated_results.md"
-          fi
