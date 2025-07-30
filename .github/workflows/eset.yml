@@ -51,7 +51,6 @@ jobs:
           echo "Swap file đã được tạo và kích hoạt."
 
       - name: Thử tất cả tổ hợp cho đến khi thành công
-        id: generate_keys # Đặt ID cho bước này để có thể lấy output
         shell: bash
         env:
           ACCOUNT: ${{ github.event.inputs.account || '0' }}
@@ -161,23 +160,12 @@ jobs:
             exit 1 # Kết thúc workflow với lỗi
           fi
 
-          # Đọc nội dung của output.log và đặt nó làm output của bước này
-          # Sử dụng EOF để xử lý nội dung đa dòng
-          if [[ -f "output.log" ]]; then
-            echo "keygen_output<<EOF" >> $GITHUB_OUTPUT
-            cat output.log >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          else
-            echo "No output.log generated, setting empty output."
-            echo "keygen_output=" >> $GITHUB_OUTPUT
-          fi
-
       - name: Cập nhật bảng Markdown với Python
         if: success() # Chỉ chạy bước này nếu các bước trước đó thành công
         shell: bash
         run: |
-          # Truyền trực tiếp nội dung output từ bước trước vào script Python
-          python3 update_markdown.py "${{ steps.generate_keys.outputs.keygen_output }}"
+          # Truyền đường dẫn tệp output.log vào script Python
+          python3 update_markdown.py ESET-KeyGen/output.log
 
       - name: Cập nhật và đẩy kết quả
         if: success() # Chỉ chạy bước này nếu các bước trước đó thành công
