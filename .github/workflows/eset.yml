@@ -2,7 +2,7 @@ name: Automated Account and Key Generator
 
 on:
   schedule:
-    - cron: "0 0 * * *" # Chạy tự động vào lúc 00:00 UTC mỗi ngày
+    - cron: "0 0 * * *"
   workflow_dispatch:
     inputs:
       account:
@@ -16,7 +16,7 @@ on:
         default: '1'
         type: string
       branch:
-        description: "Nhánh kho lưu trữ (không chạm vào nếu bạn không biết gì về nó!!!)"
+        description: "Nhánh kho lưu trữ"
         required: false
         type: choice
         options:
@@ -44,12 +44,10 @@ jobs:
 
       - name: Tạo Swap File (để tránh lỗi hết bộ nhớ)
         run: |
-          echo "Tạo swap file 4G..."
           sudo fallocate -l 4G /swapfile
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
-          echo "Swap file đã được tạo và kích hoạt."
 
       - name: Thử tất cả tổ hợp cho đến khi thành công
         shell: bash
@@ -73,7 +71,6 @@ jobs:
           SHUFFLED_OS=($(printf "%s\n" "${OS_LIST[@]}" | shuf))
 
           SUCCESS=0
-          echo "Bắt đầu thử các tổ hợp ngẫu nhiên..."
 
           run_with_timeout() {
             local timeout_duration=90
@@ -103,14 +100,12 @@ jobs:
                 rm -f output.log *KEYS.txt *ACCOUNTS.txt
 
                 if [[ "$ACCOUNT" != "0" ]]; then
-                  echo "Tạo $ACCOUNT tài khoản với $MAIL..."
                   run_with_timeout python3 main.py --auto-detect-browser --account --email-api "$MAIL" \
                     --skip-update-check --no-logo --disable-progress-bar --disable-logging \
                     --repeat "$ACCOUNT" | tee -a output.log
                 fi
 
                 if [[ "$KEY" != "0" ]]; then
-                  echo "Tạo $KEY khóa với $MAIL và $KEY_TYPE..."
                   run_with_timeout python3 main.py --auto-detect-browser "$KEY_TYPE" --email-api "$MAIL" \
                     --skip-update-check --no-logo --disable-progress-bar --disable-logging \
                     --repeat "$KEY" | tee -a output.log
@@ -124,7 +119,7 @@ jobs:
                     SUCCESS=1
                     break 3
                   else
-                    echo "❌ Không thể tạo khóa với tổ hợp này hoặc thông tin bị thiếu, thử tổ hợp tiếp theo..."
+                    echo "❌ Không thể tạo khóa với tổ hợp này, thử tổ hợp tiếp theo..."
                   fi
                 else
                   if [[ "$ACCOUNT" != "0" ]]; then
