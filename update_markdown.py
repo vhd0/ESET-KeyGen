@@ -13,14 +13,14 @@ def parse_output_log(log_file_path):
         print(f"Error: Log file not found at {log_file_path}")
         return []
 
-    # Regex to capture the required information
-    # Using re.DOTALL to make '.' match newlines, useful for multiline logs
+    # Regex to capture the required information, adjusted for log format
+    # It now matches the observed order and optionally skips line numbers
     pattern = re.compile(
-        r"License Key:\s*(?P<license_key>[^\n]+)\n"
-        r"Account Email:\s*(?P<account_email>[^\n]+)\n"
-        r"Account Password:\s*(?P<account_password>[^\n]+)\n"
-        r"License Out Date:\s*(?P<license_out_date>[^\n]+)\n"
-        r"License Name:\s*(?P<license_name>[^\n]+)",
+        r"Account Email:\s*(?P<account_email>[^\n]+)(?:\n\d+)?\n"
+        r"Account Password:\s*(?P<account_password>[^\n]+)(?:\n\d+)?\n"
+        r"License Name:\s*(?P<license_name>[^\n]+)(?:\n\d+)?\n"
+        r"License Key:\s*(?P<license_key>[^\n]+)(?:\n\d+)?\n"
+        r"License Out Date:\s*(?P<license_out_date>[^\n]+)(?:\n\d+)?",
         re.DOTALL
     )
 
