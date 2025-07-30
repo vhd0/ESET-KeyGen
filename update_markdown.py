@@ -15,11 +15,13 @@ def parse_output_log(log_file_path): # Hàm này nhận đường dẫn tệp lo
 
     # Regex để bắt các thông tin cần thiết, đã điều chỉnh cho định dạng log
     # Nó khớp với thứ tự quan sát và linh hoạt hơn với khoảng trắng và dòng số
+    # Sử dụng \s* để khớp 0 hoặc nhiều khoảng trắng (bao gồm cả newline)
+    # Sử dụng \n\s*\d+\s*\n để khớp dòng số và các khoảng trắng xung quanh
     pattern = re.compile(
-        r"\s*Account Email:\s*(?P<account_email>[^\n]+)\s*\n\s*\d+\s*\n"
-        r"\s*Account Password:\s*(?P<account_password>[^\n]+)\s*\n\s*\d+\n"
-        r"\s*License Name:\s*(?P<license_name>[^\n]+)\s*\n\s*\d+\n"
-        r"\s*License Key:\s*(?P<license_key>[^\n]+)\s*\n\s*\d+\s*\n"
+        r"Account Email:\s*(?P<account_email>[^\n]+)\s*\n\s*\d+\s*\n"
+        r"Account Password:\s*(?P<account_password>[^\n]+)\s*\n\s*\d+\s*\n"
+        r"License Name:\s*(?P<license_name>[^\n]+)\s*\n\s*\d+\s*\n"
+        r"License Key:\s*(?P<license_key>[^\n]+)\s*\n\s*\d+\s*\n"
         r"License Out Date:\s*(?P<license_out_date>[^\n]+)\s*\n\s*\d+\s*\n(?:-+\s*\n)?", # Thêm optional dashes và newline cuối cùng
         re.DOTALL
     )
