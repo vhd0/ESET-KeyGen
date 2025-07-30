@@ -45,9 +45,9 @@ jobs:
         run: |
           echo "Tạo swap file 4G..."
           sudo fallocate -l 4G /swapfile # Tạo file swap kích thước 4GB
-          sudo chmod 600 /swapfile       # Thiết lập quyền chỉ đọc/ghi cho root
-          sudo mkswap /swapfile          # Định dạng file thành không gian swap
-          sudo swapon /swapfile          # Kích hoạt swap file
+          sudo chmod 600 /swapfile        # Thiết lập quyền chỉ đọc/ghi cho root
+          sudo mkswap /swapfile           # Định dạng file thành không gian swap
+          sudo swapon /swapfile           # Kích hoạt swap file
           echo "Swap file đã được tạo và kích hoạt."
 
       - name: Thử tất cả tổ hợp cho đến khi thành công
@@ -132,10 +132,10 @@ jobs:
 
                   # Kiểm tra kết quả để đảm bảo tất cả các trường cần thiết đều có
                   if grep -q "License Key:" output.log && \
-                     grep -q "Account Email:" output.log && \
-                     grep -q "Account Password:" output.log && \
-                     grep -q "License Out Date:" output.log && \
-                     grep -q "License Name:" output.log; then
+                      grep -q "Account Email:" output.log && \
+                      grep -q "Account Password:" output.log && \
+                      grep -q "License Out Date:" output.log && \
+                      grep -q "License Name:" output.log; then
                     echo "✅ Tạo khóa thành công với OS=$CURRENT_OS!"
                     SUCCESS=1
                     break 3  # Thoát khỏi tất cả các vòng lặp nếu thành công
@@ -165,8 +165,7 @@ jobs:
         shell: bash
         run: |
           # Chạy script Python để phân tích output.log và cập nhật generated_results.md
-          python3 update_markdown.py output.log
-        working-directory: ESET-KeyGen # Đảm bảo chạy script từ thư mục ESET-KeyGen
+          python3 update_markdown.py ESET-KeyGen/output.log
 
       - name: Cập nhật và đẩy kết quả
         if: success() # Chỉ chạy bước này nếu các bước trước đó thành công
