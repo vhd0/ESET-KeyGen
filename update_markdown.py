@@ -1,6 +1,7 @@
 import re
 import os
 from datetime import datetime, timezone # Import timezone
+import base64 # Import base64 module
 
 def parse_output_content(content): # Hàm này nhận nội dung trực tiếp
     """
@@ -11,9 +12,9 @@ def parse_output_content(content): # Hàm này nhận nội dung trực tiếp
     pattern = re.compile(
         r"\s*Account Email:\s*(?P<account_email>[^\n]+)\n\s*\d+\n"
         r"\s*Account Password:\s*(?P<account_password>[^\n]+)\n\s*\d+\n"
-        r"\s*License Name:\s*(?P<license_name>[^\n]+)\n\s*\d+\n"
-        r"\s*License Key:\s*(?P<license_key>[^\n]+)\n\s*\d+\n"
-        r"\s*License Out Date:\s*(?P<license_out_date>[^\n]+)\n\s*\d+",
+        r"License Name:\s*(?P<license_name>[^\n]+)\n\s*\d+\n"
+        r"License Key:\s*(?P<license_key>[^\n]+)\n\s*\d+\n"
+        r"License Out Date:\s*(?P<license_out_date>[^\n]+)\n\s*\d+",
         re.DOTALL
     )
 
@@ -70,12 +71,19 @@ def update_markdown_table(results, markdown_file_path="generated_results.md"):
 if __name__ == "__main__":
     import sys
     if len(sys.argv) < 2:
-        print("Cách sử dụng: python update_markdown.py <chuỗi_nội_dung_đầu_ra>")
+        print("Cách sử dụng: python update_markdown.py <chuỗi_nội_dung_đầu_ra_base64>")
         sys.exit(1)
 
-    # Đọc nội dung trực tiếp từ đối số dòng lệnh đầu tiên
-    output_content_string = sys.argv[1]
+    # Đọc nội dung Base64 trực tiếp từ đối số dòng lệnh đầu tiên
+    encoded_content_string = sys.argv[1]
     
+    try:
+        # Giải mã chuỗi Base64
+        output_content_string = base64.b64decode(encoded_content_string).decode('utf-8')
+    except Exception as e:
+        print(f"Lỗi giải mã Base64: {e}")
+        sys.exit(1)
+
     parsed_data = parse_output_content(output_content_string) # Gọi hàm mới
     if parsed_data:
         update_markdown_table(parsed_data)
