@@ -1,159 +1,49 @@
 name: Automated Account and Key Generator
 
 on:
-  schedule:
-    - cron: "0 0 * * *"
+  push:
+    branches:
+      - main
   workflow_dispatch:
-    inputs:
-      account:
-        description: 'Số lượng tài khoản cần tạo (mặc định = 0)'
-        required: false
-        default: '0'
-        type: string
-      key:
-        description: 'Số lượng khóa cần tạo (mặc định = 1)'
-        required: false
-        default: '1'
-        type: string
-      branch:
-        description: "Nhánh kho lưu trữ"
-        required: false
-        type: choice
-        options:
-          - main
-          - test
-        default: main
 
 jobs:
-  generate-account-and-key:
+  build-and-update:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+
     steps:
-      - name: Kiểm tra kho lưu trữ
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ github.event.inputs.branch || 'main' }}
+          python-version: "3.8"
 
-      - name: Thiết lập môi trường Python
+      - name: Install dependencies
         run: |
-          sudo apt update
-          sudo apt install -y python3-pip python3-venv
+          python -m pip install --upgrade pip
+          # Nếu bạn có requirements.txt thì dùng lệnh sau, hoặc bỏ qua nếu không cần:
+          # pip install -r requirements.txt
 
-      - name: Tạo Swap File (tránh lỗi hết RAM)
+      - name: Run main.py to generate output.log
         run: |
-          sudo fallocate -l 4G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-
-      - name: Thử tổ hợp tạo tài khoản & key
-        shell: bash
-        env:
-          ACCOUNT: ${{ github.event.inputs.account || '0' }}
-          KEY: ${{ github.event.inputs.key || '1' }}
-        run: |
-          git clone -b ${{ github.event.inputs.branch || 'main' }} https://github.com/rzc0d3r/ESET-KeyGen.git
-          cd ESET-KeyGen
-          python3 -m venv venv
-          source venv/bin/activate
-          pip install -r requirements.txt
-
-          MAIL_PROVIDERS=("1secmail" "guerrillamail" "developermail" "mailticking" "fakemail" "inboxes" "incognitomail" "emailfake")
-          KEY_TYPES=("--key" "--small-business-key")
-          OS_LIST=("Linux" "Windows" "macOS")
-
-          SHUFFLED_MAILS=($(printf "%s\n" "${MAIL_PROVIDERS[@]}" | shuf))
-          SHUFFLED_KEYS=($(printf "%s\n" "${KEY_TYPES[@]}" | shuf))
-          SHUFFLED_OS=($(printf "%s\n" "${OS_LIST[@]}" | shuf))
-
-          SUCCESS=0
-          touch output.log
-
-          run_with_timeout() {
-            local timeout_duration=90
-            local command=("$@")
-            "${command[@]}" & pid=$!
-            for ((i=1; i<=timeout_duration; i++)); do
-              if ! kill -0 $pid 2>/dev/null; then
-                wait $pid
-                return $?
-              fi
-              sleep 1
-            done
-            kill -9 $pid 2>/dev/null
-            wait $pid 2>/dev/null
-            echo "⚠️ Timeout sau ${timeout_duration}s"
-            return 124
-          }
-
-          for CURRENT_OS in "${SHUFFLED_OS[@]}"; do
-            export CURRENT_OS
-            for MAIL in "${SHUFFLED_MAILS[@]}"; do
-              for KEY_TYPE in "${SHUFFLED_KEYS[@]}"; do
-                echo "Thử OS=$CURRENT_OS, Mail=$MAIL, Key Type=$KEY_TYPE"
-                rm -f *KEYS.txt *ACCOUNTS.txt
-
-                if [[ "$ACCOUNT" != "0" ]]; then
-                  run_with_timeout python3 main.py --auto-detect-browser --account --email-api "$MAIL" \
-                    --skip-update-check --no-logo --disable-progress-bar --disable-logging \
-                    --repeat "$ACCOUNT" | tee -a output.log
-                fi
-
-                if [[ "$KEY" != "0" ]]; then
-                  run_with_timeout python3 main.py --auto-detect-browser "$KEY_TYPE" --email-api "$MAIL" \
-                    --skip-update-check --no-logo --disable-progress-bar --disable-logging \
-                    --repeat "$KEY" | tee -a output.log
-
-                  if grep -q "License Key:" output.log && \
-                     grep -q "Account Email:" output.log && \
-                     grep -q "Account Password:" output.log && \
-                     grep -q "License Out Date:" output.log && \
-                     grep -q "License Name:" output.log; then
-                    echo "✅ Thành công với OS=$CURRENT_OS"
-                    SUCCESS=1
-                    break 3
-                  else
-                    echo "❌ Thử thất bại, thử tổ hợp tiếp theo"
-                  fi
-                elif [[ "$ACCOUNT" != "0" ]]; then
-                  echo "✅ Tạo tài khoản OK, không tạo key. Dừng thử"
-                  SUCCESS=1
-                  break 3
-                fi
-              done
-            done
-          done
-
-          if [[ $SUCCESS -eq 0 ]]; then
-            echo "❌ Thử hết tổ hợp vẫn không thành công"
-            exit 1
-          fi
-
-      - name: Cập nhật bảng Markdown với Python
-        if: success()
-        working-directory: ./ESET-KeyGen
-        shell: bash
+          python3 main.py > output.log
+          
+      - name: Run update_markdown.py to update markdown from output.log
         run: |
           python3 update_markdown.py output.log
 
-      - name: Commit & Push kết quả
-        if: success()
-        shell: bash
+      - name: Commit and push updated markdown
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add generated_results.md
+          git diff --cached --quiet || git commit -m "Update generated_results.md from workflow"
+          git push
+        env:
+          # Token để push, nếu bạn dùng token khác thì thay thế
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-          if [ -f "ESET-KeyGen/generated_results.md" ]; then
-            cp ESET-KeyGen/generated_results.md .
-            git add generated_results.md
-            if ! git diff --cached --quiet; then
-              git commit -m "🔄 Cập nhật kết quả tự động [skip ci]"
-              git push origin HEAD:${{ github.event.inputs.branch || 'main' }}
-            else
-              echo "Không có thay đổi để push."
-            fi
           else
             echo "❗ Không tìm thấy tệp generated_results.md"
           fi
