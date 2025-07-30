@@ -2,7 +2,7 @@ name: Automated Account and Key Generator
 
 on:
   schedule:
-    - cron: "0 0 * * *" # Chạy tự động vào lúc 00:00 UTC mỗi ngày
+    - cron: "0 0 * * *"
   workflow_dispatch:
     inputs:
       account:
@@ -16,7 +16,7 @@ on:
         default: '1'
         type: string
       branch:
-        description: "Nhánh kho lưu trữ (không chạm vào nếu bạn không biết gì về nó!!!)"
+        description: "Nhánh kho lưu trữ"
         required: false
         type: choice
         options:
@@ -29,7 +29,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
       - name: Kiểm tra kho lưu trữ
         uses: actions/checkout@v4
@@ -42,14 +41,14 @@ jobs:
           sudo apt update
           sudo apt install -y python3-pip python3-venv
 
-      - name: Tạo Swap File
+      - name: Tạo Swap File (tránh lỗi hết RAM)
         run: |
           sudo fallocate -l 4G /swapfile
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
 
-      - name: Thử tất cả tổ hợp cho đến khi thành công
+      - name: Thử tổ hợp tạo tài khoản & key
         shell: bash
         env:
           ACCOUNT: ${{ github.event.inputs.account || '0' }}
@@ -70,7 +69,7 @@ jobs:
           SHUFFLED_OS=($(printf "%s\n" "${OS_LIST[@]}" | shuf))
 
           SUCCESS=0
-          echo "Bắt đầu thử các tổ hợp ngẫu nhiên..."
+          touch output.log
 
           run_with_timeout() {
             local timeout_duration=90
@@ -85,28 +84,24 @@ jobs:
             done
             kill -9 $pid 2>/dev/null
             wait $pid 2>/dev/null
-            echo "Process timed out after ${timeout_duration}s"
+            echo "⚠️ Timeout sau ${timeout_duration}s"
             return 124
           }
 
           for CURRENT_OS in "${SHUFFLED_OS[@]}"; do
             export CURRENT_OS
-            echo "=== Thử với OS: $CURRENT_OS ==="
             for MAIL in "${SHUFFLED_MAILS[@]}"; do
               for KEY_TYPE in "${SHUFFLED_KEYS[@]}"; do
-                echo "=== Thử tổ hợp: OS=$CURRENT_OS, Mail=$MAIL, Key Type=$KEY_TYPE ==="
-
-                rm -f output.log *KEYS.txt *ACCOUNTS.txt
+                echo "Thử OS=$CURRENT_OS, Mail=$MAIL, Key Type=$KEY_TYPE"
+                rm -f *KEYS.txt *ACCOUNTS.txt
 
                 if [[ "$ACCOUNT" != "0" ]]; then
-                  echo "Tạo $ACCOUNT tài khoản với $MAIL..."
                   run_with_timeout python3 main.py --auto-detect-browser --account --email-api "$MAIL" \
                     --skip-update-check --no-logo --disable-progress-bar --disable-logging \
                     --repeat "$ACCOUNT" | tee -a output.log
                 fi
 
                 if [[ "$KEY" != "0" ]]; then
-                  echo "Tạo $KEY khóa với $MAIL và $KEY_TYPE..."
                   run_with_timeout python3 main.py --auto-detect-browser "$KEY_TYPE" --email-api "$MAIL" \
                     --skip-update-check --no-logo --disable-progress-bar --disable-logging \
                     --repeat "$KEY" | tee -a output.log
@@ -116,14 +111,14 @@ jobs:
                      grep -q "Account Password:" output.log && \
                      grep -q "License Out Date:" output.log && \
                      grep -q "License Name:" output.log; then
-                    echo "✅ Tạo khóa thành công với OS=$CURRENT_OS!"
+                    echo "✅ Thành công với OS=$CURRENT_OS"
                     SUCCESS=1
                     break 3
                   else
-                    echo "❌ Không thành công, thử tổ hợp khác..."
+                    echo "❌ Thử thất bại, thử tổ hợp tiếp theo"
                   fi
                 elif [[ "$ACCOUNT" != "0" ]]; then
-                  echo "Chỉ tạo tài khoản, coi như thành công."
+                  echo "✅ Tạo tài khoản OK, không tạo key. Dừng thử"
                   SUCCESS=1
                   break 3
                 fi
@@ -132,31 +127,33 @@ jobs:
           done
 
           if [[ $SUCCESS -eq 0 ]]; then
-            echo "❌ Đã thử tất cả tổ hợp nhưng không thành công!"
+            echo "❌ Thử hết tổ hợp vẫn không thành công"
             exit 1
           fi
 
       - name: Cập nhật bảng Markdown với Python
         if: success()
+        working-directory: ./ESET-KeyGen
         shell: bash
         run: |
-          python3 update_markdown.py ESET-KeyGen/output.log
+          python3 update_markdown.py output.log
 
-      - name: Cập nhật và đẩy kết quả
+      - name: Commit & Push kết quả
         if: success()
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          if [ -f "generated_results.md" ]; then
+          if [ -f "ESET-KeyGen/generated_results.md" ]; then
+            cp ESET-KeyGen/generated_results.md .
             git add generated_results.md
             if ! git diff --cached --quiet; then
-              git commit -m "Cập nhật kết quả từ ${{ env.CURRENT_OS }} [skip ci]"
+              git commit -m "🔄 Cập nhật kết quả tự động [skip ci]"
               git push origin HEAD:${{ github.event.inputs.branch || 'main' }}
             else
-              echo "Không có thay đổi để commit/push."
+              echo "Không có thay đổi để push."
             fi
+          else
+            echo "❗ Không tìm thấy tệp generated_results.md"
           fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
