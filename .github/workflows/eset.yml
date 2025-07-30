@@ -1,33 +1,149 @@
-name: ESET-KeyGen Workflow
+name: Account and Key Generator
 
 on:
-  push:
-    branches:
-      - main
+  schedule:
+    - cron: "0 0 * * *" # chạy hàng ngày lúc 0:00
+  workflow_dispatch:
+    inputs:
+      account:
+        description: 'Number of Accounts to be generated (default = 0)'
+        required: false
+        default: '0'
+        type: string
+      key:
+        description: 'Number of Keys to be generated (default = 1)'
+        required: false
+        default: '1'
+        type: string
+      branch:
+        description: "Repository branch"
+        required: false
+        type: choice
+        options:
+          - main
+          - test
+        default: main
 
 jobs:
-  build:
+  generate-account-and-key:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout repo
-      uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
+      - name: Clone KeyGen Repository
+        run: git clone -b "${{ github.event.inputs.branch || 'main' }}" https://github.com/rzc0d3r/ESET-KeyGen.git
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install colorama selenium traceback platform datetime argparse re
+      - name: Setup Python Environment
+        run: |
+          cd ESET-KeyGen
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
 
-    - name: Run main.py and save output.log
-      run: python3 main.py > output.log
+      - name: Try Combinations and Get Key
+        id: try_keys
+        shell: bash
+        run: |
+          cd ESET-KeyGen
+          source venv/bin/activate
 
-    - name: Upload output log
-      uses: actions/upload-artifact@v3
-      with:
-        name: output-log
-        path: output.log
+          # Arrays options
+          OS_ARR=("ubuntu-latest" "macos-latest" "windows-latest")
+          MAIL_ARR=("1secmail" "guerrillamail" "developermail" "mailticking" "fakemail" "inboxes" "incognitomail" "emailfake")
+          KEY_TYPE_ARR=("--key" "--small-business-key")
+
+          # Limit for account/key count
+          ACCOUNT=${{ github.event.inputs.account || '0' }}
+          KEY_COUNT=${{ github.event.inputs.key || '1' }}
+
+          FOUND_KEY=""
+          FOUND_OS=""
+          FOUND_MAIL=""
+          FOUND_KEY_TYPE=""
+
+          try_key() {
+            local os=$1
+            local mail=$2
+            local key_type=$3
+
+            # Run python keygen with given params
+            # Clear old output files before running
+            rm -f ./*KEYS.txt ./*ACCOUNTS.txt
+
+            # Prepare command based on OS for python env activation
+            if [[ "$os" == "windows-latest" ]]; then
+              # Windows fallback (use python directly, no venv activate here)
+              python main.py --auto-detect-browser "$key_type" --email-api "$mail" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat "$KEY_COUNT"
+            else
+              python3 main.py --auto-detect-browser "$key_type" --email-api "$mail" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat "$KEY_COUNT"
+            fi
+
+            # Check if any key generated
+            if ls ./*KEYS.txt 1> /dev/null 2>&1; then
+              local key_content
+              key_content=$(cat ./*KEYS.txt)
+              if [[ -n "$key_content" ]]; then
+                FOUND_KEY="$key_content"
+                FOUND_OS="$os"
+                FOUND_MAIL="$mail"
+                FOUND_KEY_TYPE="$key_type"
+                return 0
+              fi
+            fi
+            return 1
+          }
+
+          # Try all combinations until one success or all fail
+          for os in "${OS_ARR[@]}"; do
+            for mail in "${MAIL_ARR[@]}"; do
+              for key_type in "${KEY_TYPE_ARR[@]}"; do
+                echo "Trying combination OS=$os MAIL=$mail KEY_TYPE=$key_type ..."
+                if try_key "$os" "$mail" "$key_type"; then
+                  echo "Success with combination OS=$os MAIL=$mail KEY_TYPE=$key_type"
+                  break 3
+                fi
+              done
+            done
+          done
+
+          if [[ -z "$FOUND_KEY" ]]; then
+            echo "No key found for any combination." >&2
+            exit 1
+          fi
+
+          # Write results to file results.md in repo root
+          cd ..
+
+          RESULT_FILE=results.md
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          # Create file and header if doesn't exist
+          if [ ! -f "$RESULT_FILE" ]; then
+            echo "| Timestamp | OS | Mail API | Key Type | Key |" > "$RESULT_FILE"
+            echo "|-----------|----|----------|----------|-----|" >> "$RESULT_FILE"
+          fi
+
+          # Append new result (escape pipe chars in key)
+          ESCAPED_KEY=$(echo "$FOUND_KEY" | sed 's/|/\\|/g' | tr -d '\r\n')
+
+          echo "| $TIMESTAMP | $FOUND_OS | $FOUND_MAIL | $FOUND_KEY_TYPE | $ESCAPED_KEY |" >> "$RESULT_FILE"
+
+          # Keep only last 30 results (excluding header 2 lines)
+          tail -n +3 "$RESULT_FILE" | tail -30 > tmp_results.md
+          # Rebuild results.md
+          head -n 2 "$RESULT_FILE" > header.md
+          cat header.md tmp_results.md > "$RESULT_FILE"
+          rm header.md tmp_results.md
+
+          echo "Result recorded in $RESULT_FILE"
+
+      - name: Commit and Push Results
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add results.md
+          git commit -m "Update keygen results $(date -u +"%Y-%m-%dT%H:%M:%SZ")" || echo "No changes to commit"
+          git push
