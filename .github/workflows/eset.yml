@@ -148,27 +148,25 @@ jobs:
         if: success()
         shell: bash
         run: |
-          # File output.log đã được tạo ở bước trước
-          # Đặt tên file kết quả là results.md
           RESULTS_FILE="results.md"
 
           # Tạo file Markdown nếu chưa tồn tại
           if [ ! -f "$RESULTS_FILE" ]; then
             echo "# ESET License Keys" > "$RESULTS_FILE"
             echo "" >> "$RESULTS_FILE"
-            echo "| Tên giấy phép | Khóa giấy phép | Tên người dùng | Ngày hết hạn |" >> "$RESULTS_FILE"
-            echo "|---|---|---|---|" >> "$RESULTS_FILE"
+            echo "| Email | Password | License Name | License Key | Expiry |" >> "$RESULTS_FILE"
+            echo "|---|---|---|---|---|" >> "$RESULTS_FILE"
           fi
 
           # Trích xuất dữ liệu từ output.log
-          LICENSE_KEY=$(grep -oP 'License Key: \K.*' output.log | awk '{print $1}')
-          LICENSE_NAME=$(grep -oP 'License Name: \K.*' output.log | awk '{print $1,$2,$3}')
-          ACCOUNT_EMAIL=$(grep -oP 'Account Email: \K.*' output.log)
-          ACCOUNT_PASSWORD=$(grep -oP 'Account Password: \K.*' output.log)
-          OUT_DATE=$(grep -oP 'License Out Date: \K.*' output.log)
+          ACCOUNT_EMAIL=$(grep "Account Email:" output.log | cut -d ':' -f 2- | sed 's/^[[:space:]]*//')
+          ACCOUNT_PASSWORD=$(grep "Account Password:" output.log | cut -d ':' -f 2- | sed 's/^[[:space:]]*//')
+          LICENSE_NAME=$(grep "License Name:" output.log | cut -d ':' -f 2- | sed 's/^[[:space:]]*//')
+          LICENSE_KEY=$(grep "License Key:" output.log | cut -d ':' -f 2- | sed 's/^[[:space:]]*//')
+          OUT_DATE=$(grep "License Out Date:" output.log | cut -d ':' -f 2- | sed 's/^[[:space:]]*//')
 
-          # Tạo hàng mới cho bảng Markdown
-          NEW_ROW="| ${LICENSE_NAME} | ${LICENSE_KEY} | ${ACCOUNT_EMAIL} | ${OUT_DATE} |"
+          # Tạo hàng mới cho bảng Markdown với đúng thứ tự cột
+          NEW_ROW="| ${ACCOUNT_EMAIL} | ${ACCOUNT_PASSWORD} | ${LICENSE_NAME} | ${LICENSE_KEY} | ${OUT_DATE} |"
 
           # Thêm hàng mới vào file Markdown
           echo "$NEW_ROW" >> "$RESULTS_FILE"
@@ -181,7 +179,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Kiểm tra xem file results.md có thay đổi để commit/push không
           if [ -f "results.md" ]; then
             git add results.md
             if ! git diff --cached --quiet; then
