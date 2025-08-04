@@ -43,8 +43,8 @@ jobs:
 
       - name: Tạo Swap File (để tránh lỗi hết bộ nhớ)
         run: |
-          echo "Tạo swap file 4G..."
-          sudo fallocate -l 4G /swapfile # Tạo file swap kích thước 4GB
+          echo "Tạo swap file 8G..."
+          sudo fallocate -l 8G /swapfile # Tăng kích thước file swap lên 8GB
           sudo chmod 600 /swapfile        # Thiết lập quyền chỉ đọc/ghi cho root
           sudo mkswap /swapfile           # Định dạng file thành không gian swap
           sudo swapon /swapfile           # Kích hoạt swap file
@@ -195,4 +195,3 @@ jobs:
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Sử dụng GitHub token để xác thực
-
