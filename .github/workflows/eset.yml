@@ -56,9 +56,7 @@ jobs:
           ACCOUNT: ${{ github.event.inputs.account || '0' }}
           KEY: ${{ github.event.inputs.key || '1' }}
         run: |
-          # Clone công cụ tạo key
-          git clone -b ${{ github.event.inputs.branch || 'main' }} https://github.com/rzc0d3r/ESET-KeyGen.git
-          cd ESET-KeyGen
+          # Bỏ qua bước clone vì kho lưu trữ đã được checkout
           
           # Tạo và kích hoạt môi trường ảo Python
           python3 -m venv venv
@@ -164,11 +162,7 @@ jobs:
         if: success() # Chỉ chạy bước này nếu các bước trước đó thành công
         shell: bash
         run: |
-          # Di chuyển vào thư mục ESET-KeyGen và sao chép script update_markdown.py vào đây
-          cd ESET-KeyGen
-          cp ../update_markdown.py .
-
-          # Truyền đường dẫn tệp output.log vào script Python (từ cùng thư mục)
+          # Tập lệnh update_markdown.py và output.log đều nằm trong thư mục gốc
           python3 update_markdown.py output.log
 
       - name: Cập nhật và đẩy kết quả
@@ -179,9 +173,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Chuyển vào thư mục con để commit các thay đổi
-          cd ESET-KeyGen
-
           # Kiểm tra xem file markdown có tồn tại không và có thay đổi để commit/push không
           if [ -f "generated_results.md" ]; then
             git add generated_results.md
