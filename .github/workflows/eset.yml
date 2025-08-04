@@ -164,8 +164,12 @@ jobs:
         if: success() # Chỉ chạy bước này nếu các bước trước đó thành công
         shell: bash
         run: |
-          # Truyền đường dẫn tệp output.log vào script Python
-          python3 update_markdown.py ESET-KeyGen/output.log
+          # Di chuyển vào thư mục ESET-KeyGen và sao chép script update_markdown.py vào đây
+          cd ESET-KeyGen
+          cp ../update_markdown.py .
+
+          # Truyền đường dẫn tệp output.log vào script Python (từ cùng thư mục)
+          python3 update_markdown.py output.log
 
       - name: Cập nhật và đẩy kết quả
         if: success() # Chỉ chạy bước này nếu các bước trước đó thành công
@@ -174,6 +178,9 @@ jobs:
           # Cấu hình thông tin người dùng cho git commit
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Chuyển vào thư mục con để commit các thay đổi
+          cd ESET-KeyGen
 
           # Kiểm tra xem file markdown có tồn tại không và có thay đổi để commit/push không
           if [ -f "generated_results.md" ]; then
