@@ -160,13 +160,13 @@ jobs:
 
           # Trích xuất dữ liệu từ output.log
           ACCOUNT_EMAIL=$(grep "Account Email:" output.log | cut -d ':' -f 2- | sed 's/^[[:space:]]*//')
-          ACCOUNT_PASSWORD=$(grep "Account Password:" output.log | cut -d ':' -f 2- | sed 's/^[[:space:]]*//' | sed 's/|/\\|/g')
+          ACCOUNT_PASSWORD=$(grep "Account Password:" output.log | cut -d ':' -f 2- | sed 's/^[[:space:]]*//')
           LICENSE_NAME=$(grep "License Name:" output.log | cut -d ':' -f 2- | sed 's/^[[:space:]]*//')
           LICENSE_KEY=$(grep "License Key:" output.log | cut -d ':' -f 2- | sed 's/^[[:space:]]*//')
           OUT_DATE=$(grep "License Out Date:" output.log | cut -d ':' -f 2- | sed 's/^[[:space:]]*//')
 
-          # Tạo hàng mới cho bảng Markdown với đúng thứ tự cột
-          NEW_ROW="| ${ACCOUNT_EMAIL} | ${ACCOUNT_PASSWORD} | ${LICENSE_NAME} | ${LICENSE_KEY} | ${OUT_DATE} |"
+          # Tạo hàng mới cho bảng Markdown với đúng thứ tự cột, bọc mật khẩu trong dấu nháy đơn
+          NEW_ROW="| ${ACCOUNT_EMAIL} | \`${ACCOUNT_PASSWORD}\` | ${LICENSE_NAME} | ${LICENSE_KEY} | ${OUT_DATE} |"
 
           # Thêm hàng mới vào file Markdown
           echo "$NEW_ROW" >> "$RESULTS_FILE"
