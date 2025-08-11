@@ -6,3 +6,4 @@
 | gamelistmanager@baseflowpro.com | `R.8WVdco#v5d%CnQp8` | ESET Small Business Security | EE67-XVMK-55R6-GRJ6-8KJM | 07.09.2025 |
 | radlee.gabe@freedrops.org | `C9$*AlWV6>WFY_` | ESET HOME Security Premium | BMUD-XWD9-2SHH-R54S-DCBT | 08.09.2025 |
 | musab.dayron@freedrops.org | `0[M8N|"DI:&udo` | ESET HOME Security Premium | CNMC-XJVA-5R29-9M5E-9DR9 | 09.09.2025 |
+| netten@gmail2.shop | `&eD(qoy,.>.Hw=D7";su` | ESET HOME Security Premium | 8AMG-XMXT-XVGM-K9U9-J7XD | 10.09.2025 |
