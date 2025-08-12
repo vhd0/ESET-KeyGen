@@ -28,7 +28,7 @@ jobs:
   generate-account-and-key:
     runs-on: ubuntu-latest # Chạy trên môi trường Ubuntu mới nhất
     permissions:
-      contents: write # Cấp quyền ghi vào kho lưu trữ để cập nhật file Markdown
+      contents: write # Cấp quyền ghi vào kho lưu trữ để cập nhật file
     steps:
       - name: Kiểm tra kho lưu trữ
         uses: actions/checkout@v4
@@ -144,34 +144,30 @@ jobs:
             exit 1
           fi
 
-      - name: Cập nhật bảng Markdown trực tiếp
+      - name: Cập nhật file CSV trực tiếp
         if: success()
         shell: bash
         run: |
-          RESULTS_FILE="results.md"
+          RESULTS_FILE="results.csv"
 
-          # Tạo file Markdown nếu chưa tồn tại
+          # Tạo file CSV nếu chưa tồn tại
           if [ ! -f "$RESULTS_FILE" ]; then
-            echo "# ESET License Keys" > "$RESULTS_FILE"
-            echo "" >> "$RESULTS_FILE"
-            echo "| Email | Password | License Name | License Key | Expiry |" >> "$RESULTS_FILE"
-            echo "|---|---|---|---|---|" >> "$RESULTS_FILE"
+            echo "Email,Password,License Name,License Key,Expiry" > "$RESULTS_FILE"
           fi
 
           # Trích xuất dữ liệu từ output.log
           ACCOUNT_EMAIL=$(grep "Account Email:" output.log | cut -d ':' -f 2- | sed 's/^[[:space:]]*//')
-          # Thoát ký tự backtick trong mật khẩu trước khi bọc nó trong dấu backtick
-          ACCOUNT_PASSWORD=$(grep "Account Password:" output.log | cut -d ':' -f 2- | sed 's/^[[:space:]]*//' | sed 's/`/\\`/g')
+          ACCOUNT_PASSWORD=$(grep "Account Password:" output.log | cut -d ':' -f 2- | sed 's/^[[:space:]]*//')
           LICENSE_NAME=$(grep "License Name:" output.log | cut -d ':' -f 2- | sed 's/^[[:space:]]*//')
           LICENSE_KEY=$(grep "License Key:" output.log | cut -d ':' -f 2- | sed 's/^[[:space:]]*//')
           OUT_DATE=$(grep "License Out Date:" output.log | cut -d ':' -f 2- | sed 's/^[[:space:]]*//')
 
-          # Tạo hàng mới cho bảng Markdown với đúng thứ tự cột
-          NEW_ROW="| ${ACCOUNT_EMAIL} | \`${ACCOUNT_PASSWORD}\` | ${LICENSE_NAME} | ${LICENSE_KEY} | ${OUT_DATE} |"
+          # Bọc tất cả các trường trong dấu ngoặc kép để xử lý ký tự đặc biệt, sau đó nối với dấu phẩy
+          NEW_ROW="\"${ACCOUNT_EMAIL}\",\"${ACCOUNT_PASSWORD}\",\"${LICENSE_NAME}\",\"${LICENSE_KEY}\",\"${OUT_DATE}\""
 
-          # Thêm hàng mới vào file Markdown
+          # Thêm hàng mới vào file CSV
           echo "$NEW_ROW" >> "$RESULTS_FILE"
-          echo "✅ Đã cập nhật file Markdown thành công."
+          echo "✅ Đã cập nhật file CSV thành công."
 
       - name: Cập nhật và đẩy kết quả
         if: success()
@@ -180,8 +176,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          if [ -f "results.md" ]; then
-            git add results.md
+          if [ -f "results.csv" ]; then
+            git add results.csv
             if ! git diff --cached --quiet; then
               git commit -m "Cập nhật kết quả mới [skip ci]"
               git push origin HEAD:${{ github.event.inputs.branch || 'main' }}
