@@ -31,7 +31,7 @@ jobs:
       contents: write # Cấp quyền ghi vào kho lưu trữ để cập nhật file
     steps:
       - name: Kiểm tra kho lưu trữ
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ github.event.inputs.branch || 'main' }}
